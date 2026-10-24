@@ -54,8 +54,9 @@ def test_primary_pages_use_shared_accessible_shell(client, path):
     tags = Tags(body)
     assert response.status_code == 200
     assert len([1 for tag, _ in tags.tags if tag == 'h1']) == 1
-    logo = next(attrs for tag, attrs in tags.tags if tag == 'img')
-    assert logo['width'] == logo['height'] == '72'
+    logo = next(attrs for tag, attrs in tags.tags
+                if tag == 'img' and attrs.get('width') == '128')
+    assert logo['width'] == logo['height'] == '128'
     assert '/static/assets/PSU-logo.png' in logo['src']
     assert 'id="main-content"' in body
     assert 'href="#main-content"' in body

@@ -50,6 +50,45 @@
   .session-idle__actions button { width: 100%; }
 }
 
+/* Persistent feedback stays in document flow so sticky navigation never hides it. */
+.flash-stack {
+  width: min(calc(100% - 2rem), 72rem);
+  margin: 1rem auto 0;
+  display: grid;
+  gap: 8px;
+}
+.flash {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 14px 16px;
+  border: 2px solid var(--primary);
+  border-radius: 8px;
+  background: var(--primary);
+  color: #fff;
+  box-shadow: var(--shadow-md);
+  overflow-wrap: anywhere;
+}
+.flash__content { display: grid; gap: 2px; min-width: 0; }
+.flash__label { font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; }
+.flash__action,
+.flash__dismiss { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.flash__action { padding: 8px 12px; border-radius: 6px; color: #fff; font-weight: 700; }
+.flash__action:hover { background: rgb(255 255 255 / 14%); }
+.flash__dismiss { padding: 8px 12px; border: 1px solid rgb(255 255 255 / 75%); border-radius: 6px; background: transparent; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.flash__dismiss:hover { background: rgb(255 255 255 / 14%); }
+.flash__action:focus-visible, .flash__dismiss:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+.flash--error { background: var(--error); border-color: var(--error); }
+.flash--warning { background: #8a6700; border-color: #8a6700; }
+.flash--success { background: var(--color-success); border-color: var(--color-success); }
+.flash--session-expired { background: var(--primary-dark); border-color: var(--gold); }
+@media (max-width: 560px) {
+  .flash { grid-template-columns: 1fr auto; }
+  .flash__content { grid-column: 1 / -1; }
+  .flash__action, .flash__dismiss { width: 100%; }
+}
+
 :root {
   /* Brand / primary (PSU blue) */
   --color-primary: #00408b;
@@ -457,7 +496,7 @@
    Tables and scroll-rows already manage their own internal overflow. */
 html,
 body {
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 .submit-spinner {
   animation: submit-spin 0.75s linear infinite;

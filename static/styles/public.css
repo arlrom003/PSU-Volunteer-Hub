@@ -36,8 +36,11 @@ button:focus-visible,
 }
 
 .public-nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
     min-height: 72px;
-    padding: 10px max(20px, calc((100% - 1200px) / 2));
+    padding: max(10px, env(safe-area-inset-top)) max(20px, calc((100% - 1200px) / 2)) 10px;
     display: flex;
     align-items: center;
     gap: 24px;

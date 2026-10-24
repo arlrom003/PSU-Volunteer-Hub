@@ -32,6 +32,45 @@
     {{ metric('Live registrations', live_summary.registrations, 'Non-cancelled sign-ups for live activities. Each activity registration is counted separately.') }}
     {{ metric('Attendance rate', ((live_summary.attended / live_summary.registrations * 100)|round(1) if live_summary.registrations else 0) ~ '%', 'Present attendance divided by non-cancelled live registrations.') }}
   </section>
+  <section class="panel leadership-attention" aria-labelledby="leadership-attention-title">
+    <header class="section-heading section-heading--compact">
+      <div>
+        <h2 id="leadership-attention-title">Leadership attention</h2>
+        <p>Live activities that may need university-level follow-up.</p>
+      </div>
+      <small>Current live scope</small>
+    </header>
+    {% if leadership_attention.total %}
+      <div class="leadership-attention__grid">
+        <article class="leadership-attention__item">
+          <strong>{{ leadership_attention.attendance_pending }}</strong>
+          <h3>Attendance pending</h3>
+          <p>Completed activities still need attendance records reviewed.</p>
+          <a href="{{ url_for('director.analytics', view='live') }}#detailed-report">Review in Analytics</a>
+        </article>
+        <article class="leadership-attention__item">
+          <strong>{{ leadership_attention.below_target }}</strong>
+          <h3>Below target</h3>
+          <p>Activities have not reached their participant targets.</p>
+          <a href="{{ url_for('director.analytics', view='live') }}#detailed-report">Review in Analytics</a>
+        </article>
+        <article class="leadership-attention__item">
+          <strong>{{ leadership_attention.low_attendance }}</strong>
+          <h3>Low attendance</h3>
+          <p>Verified attendance is below 75% of non-cancelled registrations.</p>
+          <a href="{{ url_for('director.analytics', view='live') }}#supporting-insights">Review in Analytics</a>
+        </article>
+        <article class="leadership-attention__item">
+          <strong>{{ leadership_attention.no_recent_activity }}</strong>
+          <h3>No recent activity</h3>
+          <p>No activity appears for these campuses in the current scope.</p>
+          <a href="{{ url_for('director.analytics', view='live') }}#filters">Review in Analytics</a>
+        </article>
+      </div>
+    {% else %}
+      <div class="empty-state">No issues in this scope.</div>
+    {% endif %}
+  </section>
   <section class="panel chart-panel" data-tour-id="campus-comparison">
     <header class="panel__header">
       <div>

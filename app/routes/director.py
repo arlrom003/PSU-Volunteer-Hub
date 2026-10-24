@@ -15,7 +15,7 @@ from app.recommendation.analytics import AnalyticsAggregator
 from app.models import db
 from app.models.event import Event, Campus, SdgGoal
 from app.models.user import User
-from app.dashboard import summarize_report
+from app.dashboard import summarize_report, summarize_leadership_attention
 from app.reports import (
     build_events_report, render_csv, render_pdf, resolve_campus,
     ReportError, _build_meta, parse_date_range)
@@ -70,6 +70,21 @@ def director_dash():
     live_summary = AnalyticsAggregator.participation_summary()
     live_campuses = AnalyticsAggregator.campus_comparison()
     accomplishments = AnalyticsAggregator.activity_accomplishments(limit=5)
+    attention_accomplishments = AnalyticsAggregator.activity_accomplishments(limit=None)
+    live_events = Event.query.order_by(Event.date.desc()).all()
+    now = datetime.now()
+    attendance_pending = 0
+    active_campus_ids = set()
+    for event in live_events:
+        active_campus_ids.add(event.campus_id)
+        if (event.end_date or event.date) >= now:
+            continue
+        eligible = [r for r in event.registrations if r.status != 'cancelled']
+        if eligible and sum(1 for r in eligible if r.attendance_record) < len(eligible):
+            attendance_pending += 1
+    leadership_attention = summarize_leadership_attention(
+        live_campuses, attention_accomplishments, attendance_pending,
+        Campus.query.order_by(Campus.name).all(), active_campus_ids)
     return render_template('director/Director_Dash.html',
                            campus_stats=campus_stats,
                            total_volunteers=total_volunteers,
@@ -77,7 +92,8 @@ def director_dash():
                            top_campuses=top_campuses,
                            live_summary=live_summary,
                            live_campuses=live_campuses,
-                           accomplishments=accomplishments)
+                           accomplishments=accomplishments,
+                           leadership_attention=leadership_attention)
 
 
 @director_bp.route('/director/calendar')

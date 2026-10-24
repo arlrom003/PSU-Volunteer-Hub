@@ -67,3 +67,13 @@ def test_activity_workspace_groups_secondary_and_destructive_actions():
     assert 'Publish announcement' in content
     assert 'Remove activity' in content
     assert content.index('Publish announcement') < content.index('Remove activity')
+
+
+def test_director_leadership_attention_reflows_without_extra_tables():
+    content = _template('director/Director_Dash.html')
+    styles = (ROOT / 'static' / 'styles' / 'director.css').read_text(encoding='utf-8')
+
+    assert 'Leadership attention' in content
+    assert content.count('Review in Analytics') == 4
+    assert '.leadership-attention__grid' in styles
+    assert '@media (max-width: 560px)' in styles

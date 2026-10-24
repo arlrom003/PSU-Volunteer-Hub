@@ -39,9 +39,15 @@
 .calendar-entry small { display: block; font-weight: 400; margin-top: .2rem; }
 @media (max-width: 760px) { .calendar-day { min-height: 5rem; padding: .25rem; } .calendar-entry { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .calendar-entry small { display: none; } }
 /* Activity SDG choices are intentionally compact but retain native controls. */
-.choice-fieldset { border: 1px solid var(--border, #cbd5e1); border-radius: .5rem; padding: 1rem; }
+.choice-fieldset { display: block; width: 100%; border: 1px solid var(--border, #cbd5e1); border-radius: .5rem; padding: 1rem; }
 .choice-fieldset legend { font-weight: 700; padding: 0 .25rem; }
-.check-grid { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); margin-top: .75rem; }
+.choice-fieldset > small { color: var(--on-surface-variant); line-height: 1.4; }
+.choice-fieldset .check-grid { width: 100%; align-self: stretch; display: flex; flex-wrap: wrap; align-content: flex-start; gap: .25rem 1rem; margin-top: .75rem; }
+.choice-fieldset .check-row { flex: 0 0 calc(50% - .5rem); min-width: 0; min-height: 44px; margin: 0; padding: .5rem .25rem; align-items: flex-start; line-height: 1.35; }
+.choice-fieldset .check-row input { flex: 0 0 auto; margin-top: .15rem; accent-color: var(--primary); }
+@media (max-width: 700px) {
+  .choice-fieldset .check-row { flex-basis: 100%; }
+}
 
 .activity-form {
   padding-bottom: 24px;

@@ -20,7 +20,7 @@ def session_status():
 def end_session(message):
     session.clear()
     logout_user()
-    flash(message, 'info')
+    flash(message, 'session-expired')
     if request.endpoint == 'auth.session_activity':
         response = jsonify(sign_in_url=url_for('auth.login'))
         response.status_code = 401

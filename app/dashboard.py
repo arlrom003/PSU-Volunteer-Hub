@@ -43,3 +43,27 @@ def summarize_report(rows):
         'sdgs': sorted(sdgs.items()),
         'activities': sorted(rows, key=lambda row: row['registrations'], reverse=True)[:10],
     }
+
+
+def summarize_leadership_attention(campus_rows, accomplishment_rows,
+                                   attendance_pending, all_campuses,
+                                   active_campus_ids):
+    """Build the small live-data decision summary for the Director dashboard."""
+    low_attendance = sum(
+        1 for row in campus_rows
+        if row['registrations'] and row['attendance_rate'] < 75
+    )
+    below_target = sum(
+        1 for row in accomplishment_rows
+        if row['target'] is not None and row['actual'] < row['target']
+    )
+    no_recent_activity = sum(
+        1 for campus in all_campuses if campus.id not in active_campus_ids
+    )
+    return {
+        'low_attendance': low_attendance,
+        'below_target': below_target,
+        'attendance_pending': attendance_pending,
+        'no_recent_activity': no_recent_activity,
+        'total': low_attendance + below_target + attendance_pending + no_recent_activity,
+    }
