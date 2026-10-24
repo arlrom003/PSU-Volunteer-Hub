@@ -182,6 +182,8 @@ def test_listing_status_text_counts_and_empty_states(app, client):
     assert 'Showing 1–1 of 1 opportunity' in body
     assert 'View details' in body and 'Cancel by' not in body
     assert b'No opportunities match these filters.' in client.get('/opportunities?search=not-found').data
+    padded = client.get('/opportunities?search=%20Coding%20').get_data(as_text=True)
+    assert 'Search: Coding' in padded and 'Showing 1–1 of 1 opportunity' in padded
     for event in Event.query.all(): event.date = datetime.now() - timedelta(days=1)
     db.session.commit()
     assert b'No upcoming activities' in client.get('/opportunities').data

@@ -11,7 +11,7 @@
   <header class="page-heading">
     <div>
       <h1>Volunteer Opportunities</h1>
-      <p>{% if events %}Showing {{ first_result }}–{{ last_result }} of {{ total_count }} {{ 'opportunity' if total_count == 1 else 'opportunities' }}{% elif total_count %}Showing 0 of {{ total_count }} opportunities{% else %}0 opportunities{% endif %}</p>
+      <p aria-live="polite">{% if events %}Showing {{ first_result }}–{{ last_result }} of {{ total_count }} {{ 'opportunity' if total_count == 1 else 'opportunities' }}{% elif total_count %}Showing 0 of {{ total_count }} opportunities{% else %}0 opportunities{% endif %}</p>
     </div>
   </header>
   <form class="panel filter-row opportunities-filters" method="get">
@@ -21,7 +21,7 @@
   name="search"
   type="search"
   autocomplete="off"
-  value="{{ request.args.get('search', '') }}"
+  value="{{ search_query or '' }}"
 >
     </label>
     <label class="field">Category<select class="select" name="category"><option value="">All categories</option>{% for category in categories %}<option

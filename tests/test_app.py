@@ -3091,12 +3091,13 @@ class TestOutsiderVolunteers:
         eid = self._event_id(app)  # campus 1
         resp = client.post(
             f'/coordinator/events/{eid}/external',
-            data={'id_number': 'EXT-MAN-1', 'name': 'Manual Outsider'})
+            data={'id_number': 'EXT-MAN-1', 'name': 'Manual Outsider', 'sex': 'female'})
         assert resp.status_code == 302
         with app.app_context():
             ep = ExternalParticipant.query.filter_by(
                 id_number='EXT-MAN-1').first()
             assert ep is not None
+            assert ep.sex == 'female'
             assert Registration.query.filter_by(
                 external_participant_id=ep.id, event_id=eid).first() is not None
 
@@ -3480,6 +3481,18 @@ class TestAnalytics:
         assert counts['Not recorded'] == 1
         assert private_summary['total_registrations'] == 1
         assert legacy_summary['total_registrations'] == 1
+
+    def test_sex_participation_includes_external_volunteers(self, app):
+        event_id = self._event(app, 'External demographics', datetime.now() + timedelta(days=1), 5)
+        with app.app_context():
+            external = ExternalParticipant(id_number='EXT-SEX', sex='female')
+            db.session.add(external)
+            db.session.commit()
+            external_id = external.id
+        self._reg(app, external_id=external_id, event_id=event_id)
+        with app.app_context():
+            rows = AnalyticsAggregator.sex_participation(campus_id=5, sex='female')
+        assert rows == [{'sex': 'Female', 'actual_participants': 1}]
 
     def test_analytics_matches_report(self, app):
         # Phase 18.4: dashboard/CSV/PDF must agree for the same scope.

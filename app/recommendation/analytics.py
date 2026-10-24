@@ -474,7 +474,7 @@ class AnalyticsAggregator:
     @staticmethod
     def sex_participation(campus_id=None, start_date=None, end_date=None,
                           category=None, sex=None, activity_name=None, event_ids=None):
-        """Verified PSU attendance grouped by recorded sex for Director use."""
+        """Verified PSU and external attendance grouped by recorded sex."""
         query = db.session.query(User.sex, db.func.count(Attendance.id)).join(
             Attendance, Attendance.user_id == User.id).join(
             Event, Event.id == Attendance.event_id).filter(
@@ -500,6 +500,34 @@ class AnalyticsAggregator:
         if sex in ('male', 'female', 'prefer_not_to_say'):
             query = query.filter(User.sex == sex)
         rows = {value: int(count) for value, count in query.group_by(User.sex).all()}
+        external_query = db.session.query(
+            ExternalParticipant.sex, db.func.count(Attendance.id)
+        ).join(Registration, Registration.external_participant_id == ExternalParticipant.id).join(
+            Attendance, Attendance.registration_id == Registration.id
+        ).join(Event, Event.id == Attendance.event_id).filter(
+            Attendance.status == 'present')
+        if event_ids is not None:
+            external_query = external_query.filter(Event.id.in_(event_ids))
+        if activity_name and activity_name.strip():
+            external_query = external_query.filter(Event.title.icontains(activity_name.strip(), autoescape=True))
+        if campus_id:
+            external_query = external_query.filter(Event.campus_id == campus_id)
+        if start_date:
+            try:
+                external_query = external_query.filter(Event.date >= datetime.fromisoformat(start_date))
+            except ValueError:
+                pass
+        if end_date:
+            try:
+                external_query = external_query.filter(Event.date < datetime.fromisoformat(end_date) + timedelta(days=1))
+            except ValueError:
+                pass
+        if category:
+            external_query = external_query.filter(Event.category == category)
+        if sex in ('male', 'female', 'prefer_not_to_say'):
+            external_query = external_query.filter(ExternalParticipant.sex == sex)
+        for value, count in external_query.group_by(ExternalParticipant.sex).all():
+            rows[value] = rows.get(value, 0) + int(count)
         labels = (
             ('female', 'Female'),
             ('male', 'Male'),

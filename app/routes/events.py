@@ -131,7 +131,7 @@ def _external_cancellation_available(registration):
 
 
 def _upsert_external_participant(id_number, name=None, contact_number=None,
-                                 address=None, email=None):
+                                 address=None, email=None, sex=None):
     """Find an existing outsider by ID number or create a new record."""
     id_number = (id_number or '').strip()
     participant = ExternalParticipant.query.filter_by(id_number=id_number).first()
@@ -147,6 +147,8 @@ def _upsert_external_participant(id_number, name=None, contact_number=None,
         participant.address = address.strip()
     if email and not participant.email:
         participant.email = email.strip()
+    if sex and not participant.sex:
+        participant.sex = sex
     db.session.flush()
     return participant
 
@@ -167,8 +169,8 @@ def opportunities():
     if campus_mode not in ('include', 'exclude'):
         filter_error = 'Choose whether to show only or exclude the selected campuses, then apply filters again.'
         campus_mode = 'include'
-    category = request.args.get('category', type=str) or None
-    search = request.args.get('search', type=str) or None
+    category = (request.args.get('category', type=str) or '').strip() or None
+    search = (request.args.get('search', type=str) or '').strip() or None
     now = datetime.now()
     query = Event.query.filter(Event.date >= now, Event.slots > 0)
     upcoming_count = query.count()

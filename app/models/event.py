@@ -148,6 +148,8 @@ class ExternalParticipant(db.Model):
     contact_number = db.Column(db.String(50), nullable=True)
     address = db.Column(db.Text, nullable=True)
     email = db.Column(db.String(120), nullable=True)
+    sex = db.Column(db.Enum('male', 'female', 'prefer_not_to_say',
+                            name='external_participant_sexes'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     registrations = db.relationship(

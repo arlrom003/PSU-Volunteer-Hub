@@ -855,10 +855,14 @@ def add_external_participant(event_id):
 
     if request.method == 'POST':
         id_number = request.form.get('id_number', '').strip()
+        sex = request.form.get('sex', '').strip().lower() or None
         if not id_number:
             flash('ID number is required for outsider registration.', 'error')
             return render_template(
                 'coordinator/add_external.html', event=event), 400
+        if sex not in (None, 'male', 'female', 'prefer_not_to_say'):
+            flash('Choose a valid gender response.', 'error')
+            return render_template('coordinator/add_external.html', event=event), 400
         from app.models.event import Registration
         from app.routes.events import _upsert_external_participant
         participant = _upsert_external_participant(
@@ -866,7 +870,7 @@ def add_external_participant(event_id):
             name=request.form.get('name', '').strip(),
             contact_number=request.form.get('contact_number', '').strip(),
             address=request.form.get('address', '').strip(),
-            email=request.form.get('email', '').strip())
+            email=request.form.get('email', '').strip(), sex=sex)
         existing = Registration.query.filter_by(
             external_participant_id=participant.id, event_id=event.id).first()
         if existing is None:
