@@ -30,7 +30,7 @@
             {{ field('PSU ID number', 'id_number', errors, hint='Enter your student or employee ID.') }}
             {{ field('College affiliation', 'college_affiliation', errors, hint='Enter the name of your college or office.') }}
             {% set campus_options = [] %}
-            {% for campus in campuses %}{% set _ = campus_options.append((campus.id, campus.name)) %}{% endfor %}
+            {% for campus in campuses|sort(attribute='name') %}{% set _ = campus_options.append((campus.id, campus.name)) %}{% endfor %}
             {{ select_field('Campus', 'campus', campus_options, errors) }}
           </div>
         </fieldset>

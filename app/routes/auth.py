@@ -280,7 +280,7 @@ def register():
         # instead of bouncing the visitor to their own dashboard.
         logout_user()
 
-    campuses = Campus.query.all()
+    campuses = Campus.query.order_by(db.func.lower(Campus.name), Campus.name, Campus.id).all()
     interests = Interest.query.all()
     skills = Skill.query.all()
     active_terms = _active_terms()
