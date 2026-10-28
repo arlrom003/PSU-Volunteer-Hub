@@ -24,9 +24,14 @@ class Config:
 
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf', 'doc', 'docx'}
 
+    MAIL_PROVIDER = os.environ.get('MAIL_PROVIDER', 'smtp').lower()
+    BREVO_API_KEY = os.environ.get('BREVO_API_KEY')
     MAIL_SERVER = os.environ.get('MAIL_SERVER', 'localhost')
     MAIL_PORT = int(os.environ.get('MAIL_PORT', 25))
     MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'false').lower() == 'true'
+    MAIL_USE_SSL = os.environ.get('MAIL_USE_SSL', 'false').lower() == 'true'
+    MAIL_TIMEOUT = 15
+    MAIL_SUPPRESS_SEND = os.environ.get('MAIL_SUPPRESS_SEND', 'false').lower() == 'true'
     MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
     MAIL_DEFAULT_SENDER = os.environ.get(
@@ -94,7 +99,7 @@ class DevelopmentConfig(Config):
     DEBUG = True
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL',
                                              'mysql+pymysql://root:@localhost/psu_volunteer_hub')
-    MAIL_SUPPRESS_SEND = True
+    MAIL_SUPPRESS_SEND = os.environ.get('MAIL_SUPPRESS_SEND', 'true').lower() == 'true'
     MAIL_DEBUG = True
 
 

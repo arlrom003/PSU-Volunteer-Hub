@@ -299,12 +299,87 @@ focused local checks, not a new full-suite or deployment claim.
 - Set strong, unique `SECRET_KEY` and `DATABASE_URL` environment variables; the app refuses to start in production without both.
 - Deploy behind an HTTPS reverse proxy and set `TRUSTED_PROXY_COUNT` to the number of trusted proxies. Do not expose the Flask development server publicly.
 - Use a dedicated MySQL application account with only the database privileges the app needs; never deploy with MySQL `root` credentials.
-- Configure a working SMTP server (`MAIL_SERVER`, `MAIL_PORT`, `MAIL_USE_TLS`, `MAIL_USERNAME`, `MAIL_PASSWORD`, and `MAIL_DEFAULT_SENDER`) before enabling public password resets.
+- Configure working email delivery before enabling public password resets; see the email setup below.
 - Back up MySQL regularly, encrypt backups, and test restoration before each release. Apply migrations to a backup/staging copy first.
   See `BACKUP_RESTORE_RUNBOOK.md` and the scoped local results in
   `BACKUP_RESTORE_QA.md`. The local drill passed for database and existing public
   files, not encrypted off-site recovery or private-file restoration.
 - Keep `PRIVATE_UPLOAD_FOLDER` outside the web root. New milestone uploads are private and are downloaded only through role-checked routes.
+
+## Password recovery email setup
+
+Forgot password emails a random temporary password to the active account's
+registered email. Enter it on the sign-in page to choose a new password before
+accessing the account. It expires after 30 minutes, only the latest one works,
+and completing the reset invalidates it and signs out existing sessions.
+Requesting a reset leaves the current password unchanged. No schema migration
+is needed: recovery uses the existing `password_reset_tokens` table.
+
+### Brevo HTTPS API (recommended for Railway)
+
+1. Create or sign in to your [Brevo account](https://app.brevo.com/).
+2. Under **Settings > Senders, Domains, IPs**, add a sender named
+   **PSU Volunteer Hub** with an email address you control. Complete sender
+   verification and authenticate your sending domain using Brevo's DNS records.
+   A PSU address requires authorization and DNS help from the university's IT team.
+3. Under **Settings > SMTP & API > API Keys**, generate an API key for this app.
+   Use an **API key**, not an SMTP key, for the HTTPS integration.
+4. Set these variables in your untracked `.env` file (local use) or in your
+   deployed app's private environment variables:
+
+   ```dotenv
+   MAIL_PROVIDER=brevo
+   BREVO_API_KEY=your-private-brevo-api-key
+   MAIL_DEFAULT_SENDER=your-verified-sender@example.com
+   MAIL_SUPPRESS_SEND=false
+   ```
+
+5. Restart or redeploy the app, request a reset for a registered test account,
+   and check **Transactional > Logs** in Brevo and the recipient's inbox/spam.
+   A provider-accepted request does not by itself prove inbox delivery.
+
+The app posts to `https://api.brevo.com/v3/smtp/email` with a 15-second timeout.
+No extra SDK is needed. Missing keys, rejected requests and connection errors
+follow the existing failure path, preserving the current account password and
+previous recovery credential. Keys and email bodies are not logged.
+
+Railway Free, Trial, and Hobby block outbound SMTP; use the HTTPS integration
+on these plans. [Railway email delivery rules](https://docs.railway.com/networking/outbound-networking).
+Brevo setup: [sender verification](https://help.brevo.com/hc/en-us/articles/208836149-Create-a-new-sender-From-name-and-From-email),
+[API authentication](https://developers.brevo.com/docs/authentication-schemes),
+[sending email](https://developers.brevo.com/docs/send-a-transactional-email).
+
+### SMTP alternative
+
+Set `MAIL_PROVIDER=smtp` and these variables in your untracked `.env` file
+or hosting provider's environment settings:
+
+- `MAIL_SERVER`: your provider's SMTP host.
+- `MAIL_PORT`: your provider's port, usually `587` for STARTTLS or `465` for SSL.
+- `MAIL_USE_TLS=true`, `MAIL_USE_SSL=false` for STARTTLS; reverse them for SSL.
+  Enable only one.
+- `MAIL_USERNAME` and `MAIL_PASSWORD`: your sender account's SMTP credentials.
+  Use a provider-issued app password when required.
+- `MAIL_DEFAULT_SENDER`: a sender address authorized by your provider.
+- `MAIL_SUPPRESS_SEND=false`: required for delivery, including local development.
+  Development suppresses delivery by default; automated tests always suppress it.
+
+Restart the app after changing configuration. Request a reset for a real
+registered test account, check inbox and spam, sign in with the temporary
+password, choose a new password, and verify the temporary password no longer
+works. Automated tests use captured email and mocked SMTP; they do not prove
+live inbox delivery. A server log reporting `Password reset email delivery failed`
+means the email provider connection, sender, or credentials need checking. The public
+response stays generic to protect account privacy. Never commit real credentials.
+
+For Gmail or Google Workspace, use `smtp.gmail.com`, port `587`, and
+`MAIL_USE_TLS=true`. Set both sender fields to your full Google email address.
+Enable 2-Step Verification, then generate an App Password for PSU Volunteer Hub
+and save it as `MAIL_PASSWORD`; do not use your regular Google password.
+See [Google's App Password instructions](https://support.google.com/mail/answer/185833)
+and [Google's SMTP setup](https://knowledge.workspace.google.com/admin/gmail/send-email-from-a-printer-scanner-or-app).
+If App Passwords are unavailable for your managed account, ask the Workspace
+administrator which SMTP relay or permitted sender account to use.
 
 ## Technology
 

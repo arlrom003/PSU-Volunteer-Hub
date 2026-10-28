@@ -42,7 +42,11 @@ existing uploaded files; local PSU assets and shared styles remain included.
    The supplied requirements include mysqlclient for `mysql://` URLs and PyMySQL
    for `mysql+pymysql://`. Verify the actual private URL format without printing
    credentials. Do not use the public database URL for the app's internal link.
-   SMTP is not configured by this preparation; do not claim reset-email delivery.
+   For reset emails, set `MAIL_PROVIDER=brevo`, `BREVO_API_KEY` privately,
+   `MAIL_DEFAULT_SENDER` to your verified Brevo sender, and
+   `MAIL_SUPPRESS_SEND=false`. Free, Trial, and Hobby plans require HTTPS email
+   APIs because Railway blocks outbound SMTP. See the Brevo setup in `README.md`.
+   Live inbox delivery must still be verified after deployment.
 5. Set healthcheck path **/auth/login**, timeout **120 seconds**, restart policy
    **On Failure**, maximum retries **3**, and one app replica in dashboard settings.
    The healthcheck proves HTTP liveness only, not initialized schema or DB health.

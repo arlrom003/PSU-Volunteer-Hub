@@ -14,7 +14,7 @@ from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, abort, Response, current_app, session)
 from flask_login import login_required, current_user, logout_user
 from app.models import db
-from app.models.user import User, SystemSetting, VolunteerProfile
+from app.models.user import User, SystemSetting, VolunteerProfile, PasswordResetToken
 from app.models.event import ActivityCategory, Campus, Event
 from app.models.notification import Notification, notify_campus_coordinators
 from app.utils.decorators import role_required
@@ -362,6 +362,8 @@ def reset_password(user_id):
         return redirect(url_for('admin.admin_dash'))
     user.set_password(new_password)
     user.auth_version += 1
+    PasswordResetToken.query.filter_by(user_id=user.id, used_at=None).update(
+        {'used_at': datetime.utcnow()})
     log_activity('user_password_reset', user)
     db.session.commit()
     if user.id == current_user.id:

@@ -120,7 +120,14 @@ def login():
             User.id_number == identifier,
         )).first()
 
-        if user is None or not user.check_password(password):
+        permanent_password = user is not None and user.check_password(password)
+        recovery = None
+        if user is not None and not permanent_password and user.is_active:
+            recovery = PasswordResetToken.query.filter_by(
+                user_id=user.id, token_hash=sha256(password.encode()).hexdigest(),
+                used_at=None).filter(PasswordResetToken.expires_at > datetime.utcnow()).first()
+
+        if not permanent_password and recovery is None:
             _record_attempt('login', identifier)
             return render_template(
                 'login.html', form_error='Invalid email/ID or password.')
@@ -129,6 +136,12 @@ def login():
             session['reactivation_user_id'] = user.id
             return render_template('login.html', show_reactivation_modal=True)
 
+        if recovery is not None:
+            session.clear()
+            session['password_reset_hash'] = recovery.token_hash
+            return redirect(url_for('auth.reset_password'))
+
+        session.pop('password_reset_hash', None)
         login_user(user, remember=False)
         session['auth_version'] = user.auth_version
         session['last_activity_at'] = time.time()
@@ -433,54 +446,81 @@ def register():
 
 @auth_bp.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
-    """Issue a short-lived reset token without revealing account existence."""
+    """Email a short-lived recovery password without changing the current one."""
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
+        if not email or len(email) > 120 or email.count('@') != 1 or any(c.isspace() for c in email):
+            return render_template('auth/forgot_password.html', errors={
+                'email': 'Enter the email address registered to your account.'}), 400
         if _is_limited('password_reset', email):
-            flash('If the account exists, a reset email will arrive shortly.', 'info')
+            flash('If an active account uses that email, a temporary password will arrive shortly. Check your spam folder too.', 'info')
             return redirect(url_for('auth.login'))
         _record_attempt('password_reset', email)
         user = User.query.filter(db.func.lower(User.email) == email).first()
         if user and user.is_active:
-            raw_token = secrets.token_urlsafe(32)
+            raw_token = secrets.token_urlsafe(15)
             PasswordResetToken.query.filter_by(user_id=user.id, used_at=None).update(
                 {'used_at': datetime.utcnow()})
             db.session.add(PasswordResetToken(
                 user_id=user.id, token_hash=sha256(raw_token.encode()).hexdigest(),
                 expires_at=datetime.utcnow() + timedelta(minutes=30)))
-            db.session.commit()
-            reset_url = url_for('auth.reset_password', token=raw_token, _external=True)
             try:
-                send_email(user.email, 'Reset your PSU Volunteer Hub password',
-                           f'Use this link within 30 minutes to reset your password:\n{reset_url}')
+                send_email(user.email, 'Your PSU Volunteer Hub temporary password',
+                           f'Temporary password: {raw_token}\n\n'
+                           'Open PSU Volunteer Hub and sign in with your registered email '
+                           'and this temporary password within 30 minutes. You must choose '
+                           'a new password before accessing your account.\n\n'
+                           'Only the latest temporary password works. It can complete one reset.\n'
+                           'If you did not request this, ignore this email. '
+                           'Your current password has not changed.')
             except OSError:
-                current_app.logger.exception('Password reset email delivery failed')
-        flash('If the account exists, a reset email will arrive shortly.', 'info')
+                db.session.rollback()
+                current_app.logger.error('Password reset email delivery failed; check email provider configuration')
+            else:
+                db.session.commit()
+        flash('If an active account uses that email, a temporary password will arrive shortly. Check your spam folder too.', 'info')
         return redirect(url_for('auth.login'))
-    return render_template('auth/forgot_password.html')
+    return render_template('auth/forgot_password.html', errors={})
 
 
+@auth_bp.route('/reset-password', defaults={'token': None}, methods=['GET', 'POST'])
 @auth_bp.route('/reset-password/<token>', methods=['GET', 'POST'])
 def reset_password(token):
-    token_hash = sha256(token.encode()).hexdigest()
+    token_hash = sha256(token.encode()).hexdigest() if token else session.get('password_reset_hash')
     record = PasswordResetToken.query.filter_by(token_hash=token_hash, used_at=None).first()
-    if record is None or record.expires_at < datetime.utcnow():
-        flash('This password-reset link is invalid or has expired.', 'error')
+    if record is None or record.expires_at <= datetime.utcnow() or not record.user.is_active:
+        session.pop('password_reset_hash', None)
+        flash('This password reset is invalid or has expired. Request another temporary password.', 'error')
         return redirect(url_for('auth.forgot_password'))
+    errors = {}
     if request.method == 'POST':
         password = request.form.get('password', '')
         confirmation = request.form.get('password_confirmation', '')
         minimum = _password_min_length()
-        if len(password) < minimum or password != confirmation:
-            flash(f'Use a matching password of at least {minimum} characters.', 'error')
-        else:
+        if len(password) < minimum:
+            errors['password'] = f'Use at least {minimum} characters.'
+        if password != confirmation:
+            errors['password_confirmation'] = 'Enter the same new password in both fields.'
+        if sha256(password.encode()).hexdigest() == record.token_hash:
+            errors['password'] = 'Choose a new password different from your temporary password.'
+        if not errors:
+            claimed = PasswordResetToken.query.filter_by(id=record.id, used_at=None).filter(
+                PasswordResetToken.expires_at > datetime.utcnow()).update(
+                    {'used_at': datetime.utcnow()}, synchronize_session=False)
+            if not claimed:
+                db.session.rollback()
+                session.pop('password_reset_hash', None)
+                flash('This password reset has expired or was already used. Request another temporary password.', 'error')
+                return redirect(url_for('auth.forgot_password'))
             record.user.set_password(password)
             record.user.auth_version += 1
-            record.used_at = datetime.utcnow()
+            PasswordResetToken.query.filter_by(user_id=record.user_id, used_at=None).update(
+                {'used_at': datetime.utcnow()}, synchronize_session=False)
             db.session.commit()
+            session.pop('password_reset_hash', None)
             flash('Password reset. Please sign in.', 'success')
             return redirect(url_for('auth.login'))
-    return render_template('auth/reset_password.html', password_min=_password_min_length())
+    return render_template('auth/reset_password.html', password_min=_password_min_length(), errors=errors)
 
 
 @auth_bp.route('/privacy', methods=['GET', 'POST'])

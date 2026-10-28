@@ -62,7 +62,8 @@ def create_app(config_name=None):
 
     @app.after_request
     def set_security_headers(response):
-        if current_user.is_authenticated or request.endpoint == 'auth.session_activity':
+        if current_user.is_authenticated or request.endpoint in (
+                'auth.session_activity', 'auth.login', 'auth.forgot_password', 'auth.reset_password'):
             response.headers['Cache-Control'] = 'no-store'
         if config_name == 'production':
             response.headers.setdefault('Content-Security-Policy',
