@@ -3826,3 +3826,46 @@ class TestActivityCalendarViews:
         response = client.get('/director/calendar')
         assert response.status_code == 200
         assert 'University activity calendar' in response.get_data(as_text=True)
+
+
+class TestSecurityAuditRegressions:
+    @pytest.mark.parametrize('path', [
+        '/reports/events.csv', '/reports/events.pdf', '/coordinator_analytics',
+    ])
+    def test_unassigned_coordinator_cannot_read_reports(self, app, client, path):
+        coordinator_id = _create_user(
+            app, email='unassigned-coordinator@test.com', role='coordinator')
+        _login_as(client, coordinator_id)
+        assert client.get(path).status_code == 403
+
+    @pytest.mark.parametrize('password', ['short', 'replacement123'])
+    def test_admin_reset_revokes_only_target_recovery_tokens(self, app, client, password):
+        admin_id = _create_user(app, email='recovery-admin@test.com', role='admin')
+        target_id = _create_user(app, email='recovery-target@test.com')
+        with app.app_context():
+            for user_id, raw in [(target_id, 'earlier-token'),
+                                 (target_id, 'second-token'),
+                                 (admin_id, 'other-user-token')]:
+                db.session.add(PasswordResetToken(
+                    user_id=user_id, token_hash=sha256(raw.encode()).hexdigest(),
+                    expires_at=datetime.utcnow() + timedelta(minutes=30)))
+            db.session.commit()
+        _login_as(client, admin_id)
+        assert client.post(f'/admin/users/{target_id}/reset-password', data={
+            'new_password': password}).status_code == 302
+        with app.app_context():
+            accepted = password != 'short'
+            tokens = PasswordResetToken.query.filter_by(user_id=target_id).all()
+            assert len(tokens) == 2
+            assert all((token.used_at is not None) == accepted for token in tokens)
+            assert PasswordResetToken.query.filter_by(user_id=admin_id).one().used_at is None
+        if accepted:
+            with app.app_context():
+                response = app.test_client().post('/auth/reset-password/earlier-token', data={
+                    'password': 'stale-token-password',
+                    'password_confirmation': 'stale-token-password',
+                })
+            assert response.location == '/auth/forgot-password'
+        with app.app_context():
+            assert db.session.get(User, target_id).check_password(
+                password if accepted else 'password123')

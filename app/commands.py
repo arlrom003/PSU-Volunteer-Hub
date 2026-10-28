@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 
 from app.models import db
 from app.models.event import (Campus, HistoricalActivity, Event, Registration,
-                              Attendance)
+                              Attendance, ExternalParticipant, SdgGoal)
 from app.models.user import User
 
 
@@ -183,6 +183,7 @@ def seed_demo_analytics():
         for index, (title, category) in enumerate(extra_categories)
     )
     created_events = created_registrations = created_attendance = 0
+    created_external = created_external_registrations = 0
     for title, category, campus_offset, days_ago, registration_count in definitions:
         campus = campuses[(campus_offset - 1) % len(campuses)]
         event = Event.query.filter_by(title=f'{prefix} {title}').first()
@@ -198,6 +199,9 @@ def seed_demo_analytics():
             db.session.add(event)
             db.session.flush()
             created_events += 1
+        sdgs = SdgGoal.query.order_by(SdgGoal.number).all()
+        if sdgs:
+            event.sdgs = [sdgs[event.id % len(sdgs)], sdgs[(event.id + 4) % len(sdgs)]]
         for index in range(registration_count):
             volunteer = volunteers[index % len(volunteers)]
             registration = Registration.query.filter_by(
@@ -219,10 +223,47 @@ def seed_demo_analytics():
                         status='present'))
                     registration.status = 'completed'
                     created_attendance += 1
+
+    external_data = [
+        ('DEMO-EXT-001', 'Alex Reyes', 'male'),
+        ('DEMO-EXT-002', 'Maria Santos', 'female'),
+        ('DEMO-EXT-003', 'Jordan Cruz', 'prefer_not_to_say'),
+        ('DEMO-EXT-004', 'Lea Garcia', 'female'),
+    ]
+    external_participants = []
+    for id_number, name, sex in external_data:
+        participant = ExternalParticipant.query.filter_by(id_number=id_number).first()
+        if participant is None:
+            participant = ExternalParticipant(
+                id_number=id_number, name=name,
+                email=f'{id_number.lower()}@demo.invalid', sex=sex)
+            db.session.add(participant)
+            db.session.flush()
+            created_external += 1
+        external_participants.append(participant)
+
+    for index, participant in enumerate(external_participants):
+        event = Event.query.filter_by(title=f'{prefix} {definitions[index][0]}').first()
+        registration = Registration.query.filter_by(
+            external_participant_id=participant.id, event_id=event.id).first()
+        if registration is None:
+            registration = Registration(
+                external_participant_id=participant.id,
+                event_id=event.id, status='confirmed')
+            db.session.add(registration)
+            db.session.flush()
+            created_external_registrations += 1
+        if index < 3 and not Attendance.query.filter_by(registration_id=registration.id).first():
+            db.session.add(Attendance(
+                registration_id=registration.id, event_id=event.id,
+                status='present' if index != 2 else 'excused'))
+            registration.status = 'completed'
+            created_attendance += 1
     db.session.commit()
     click.echo(
         f'{created_events} events, {created_registrations} registrations, '
-        f'{created_attendance} attendance records created.')
+        f'{created_attendance} attendance records, {created_external} external '
+        f'participants, and {created_external_registrations} external registrations created.')
 
 
 def register_commands(app):

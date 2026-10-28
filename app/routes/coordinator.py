@@ -156,7 +156,10 @@ def _validate_milestone(file):
 def _coordinator_campus_id():
     """Coordinator campus scope is always derived server-side, never from the
     request, so a forged ?campus_id= parameter cannot leak another campus."""
-    return current_user.campus_id
+    campus_id = current_user.campus_id
+    if not campus_id:
+        abort(403)
+    return campus_id
 
 
 def _parse_event_schedule(form):
@@ -806,6 +809,7 @@ def _date_range_label(start_date, end_date):
 @login_required
 @role_required('coordinator')
 def analytics():
+    campus_id = _coordinator_campus_id()
     try:
         parse_date_range(request.args.get('start_date'), request.args.get('end_date'))
     except ReportError:
@@ -815,18 +819,18 @@ def analytics():
     # reflects the coordinator's reality, not the whole university.
     campus_name = current_user.campus.name if current_user.campus else 'Campus'
     forecast_data = AnalyticsAggregator.forecast_turnout(
-        campus_id=current_user.campus_id)
+        campus_id=campus_id)
     attendance_summary = AnalyticsAggregator.attendance_summary(
-        campus_id=current_user.campus_id)
+        campus_id=campus_id)
     categories = [row[0] for row in db.session.query(Event.category).filter(
-        Event.campus_id == current_user.campus_id,
+        Event.campus_id == campus_id,
         Event.category.isnot(None)).distinct().order_by(Event.category).all()]
 
     start_date = request.args.get('start_date', '').strip()
     end_date = request.args.get('end_date', '').strip()
     category = request.args.get('category', '').strip()
     report_rows, report_summary = build_events_report(
-        campus_id=_coordinator_campus_id(), start_date=start_date,
+        campus_id=campus_id, start_date=start_date,
         end_date=end_date, category=category,
         activity_name=request.args.get('activity_name', ''))
 
