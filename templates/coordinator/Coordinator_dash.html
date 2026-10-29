@@ -1,15 +1,16 @@
 {% extends 'layouts/role_base.html' %}
 {% from 'partials/info_tip.html' import info_tip %}
-{% from 'partials/dashboard_ui.html' import metric %}
+{% from 'partials/dashboard_ui.html' import period_control, performance_metrics, findings %}
 {% set tour_page = true %}
 {% block title %}Coordinator Dashboard · PSU Volunteer Hub{% endblock %}
 {% block header_title %}Coordinator Console{% endblock %}
 {% block header_subtitle %}{{ campus_name }} Campus{% endblock %}
 {% block content %}
+<div class="dashboard-overview">
   <header class="page-heading">
     <div>
-      <h1>Extension Dashboard</h1>
-      <p>Manage activities and participation at {{ campus_name }}.</p>
+      <h1>{{ campus_name }} campus overview</h1>
+      <p>Resolve requests, complete attendance, and prepare your next activities.</p>
     </div>
     <div class="panel__actions">
       <a
@@ -19,29 +20,38 @@
       >Create Activity</a>
       <a
         class="btn btn--outline"
-        href="{{ url_for('coordinator.activity_calendar') }}"
-      >Calendar</a>
-      <a
-        class="btn btn--outline"
         data-tour-id="analytics"
-        href="{{ url_for('coordinator.analytics', start_date=start_date, end_date=end_date, category=selected_category) }}"
+        href="{{ url_for('coordinator.analytics', start_date=period.start, end_date=period.end) }}"
       >Analytics and reports</a>
     </div>
   </header>
-  <section class="dashboard-attention" aria-labelledby="attention-heading" data-tour-id="summary">
-    <header class="section-heading section-heading--compact">
-      <div class="heading-with-tip"><h2 id="attention-heading">Needs Attention</h2>{{ info_tip('Attendance rate', 'Present attendance divided by non-cancelled campus registrations, across all dates.') }}</div>
-      <p>Start with the operational work that may need a decision today.</p>
-    </header>
-    <div class="dashboard-attention__grid">
-      <a href="{{ url_for('coordinator.cancellation_requests') }}"><span>Pending cancellations</span><strong>{{ pending_cancellations }}</strong><small>Review requests</small></a>
-      <a href="#activity-workspace"><span>Upcoming in view</span><strong>{{ upcoming_count }}</strong><small>Open the Activity Workspace</small></a>
-      <a href="{{ url_for('coordinator.attendance') }}"><span>Verified attendance</span><strong>{{ campus_total_attended }}</strong><small>Track attendance</small></a>
-    </div>
+  <div class="coordinator-briefing">
+  <div data-tour-id="attendance">
+    {{ findings(attention_items, 'coordinator.analytics', {'start_date': period.start, 'end_date': period.end}, pending_cancellations=pending_cancellations, scope='Attendance work across all dates; outcomes ' ~ period.label, landing=true) }}
+  </div>
+  <section class="upcoming-overview">
+    <h2>Upcoming activities</h2>
+    <ul class="attention-list">
+      {% for event in next_events %}
+        <li>
+          <div><strong>{{ event.title }}</strong>
+            {% set registration_count = event.registrations|rejectattr('status', 'equalto', 'cancelled')|list|length %}
+            <p>{{ event.date.strftime('%b %d, %Y at %H:%M') }} · {{ registration_count }} {{ 'registration' if registration_count == 1 else 'registrations' }} · {% if event.slots > 0 %}{{ event.slots_remaining() }} of {{ event.slots }} slots remaining{% else %}No slot limit{% endif %}</p>
+          </div>
+          <a class="btn btn--outline" href="{{ url_for('coordinator.edit_activity', event_id=event.id) }}">Manage<span class="sr-only"> {{ event.title }}</span></a>
+        </li>
+      {% else %}<li>No upcoming activities. Use Create Activity to schedule one.</li>{% endfor %}
+    </ul>
   </section>
-  <section class="dashboard-workspace" id="activity-workspace">
-    <header class="section-heading section-heading--compact"><h2>Activity Workspace</h2><p>Filter and manage the activities owned by {{ campus_name }}.</p></header>
-  <section class="panel" data-tour-id="filters"><header class="panel__header"><div><div class="heading-with-tip"><h3>Activity filters</h3>{{ info_tip('Activity filters', 'Filters change the activity workspace and target-progress view for this campus. The default view shows upcoming activities.') }}</div><small>Default view shows upcoming activities.</small></div></header><form class="filter-row" method="get"><label class="field">Status<select class="select" name="status">{% for value in ['upcoming', 'completed', 'cancelled', 'all'] %}<option
+  </div>
+  <section class="dashboard-evidence" data-tour-id="target-progress">
+    {{ period_control(period, 'coordinator.coordinator_dash', {'status': selected_status, 'category': selected_category, 'start_date': start_date, 'end_date': end_date, 'workspace': request.args.get('workspace', '')}, true) }}
+    {{ performance_metrics(performance, period, deltas) }}
+  </section>
+  <details class="secondary-workspace" id="activity-workspace"{{ ' open' if request.args.get('workspace') == '1' or selected_status != 'upcoming' or selected_category or start_date or end_date }}>
+    <summary data-tour-id="activity-workspace">Manage activities <span>{{ events|length }} in workspace</span></summary>
+    <div class="workspace-content">
+  <section class="panel" data-tour-id="filters"><header class="panel__header"><div><div class="heading-with-tip"><h3>Activity filters</h3>{{ info_tip('Activity filters', 'These filters affect this workspace only. Participation outcomes use the separate performance period.') }}</div><small>Default view shows upcoming activities.</small></div></header><form class="filter-row" method="get"><input type="hidden" name="workspace" value="1"><input type="hidden" name="period" value="{{ period.value }}"><label class="field">Status<select class="select" name="status">{% for value in ['upcoming', 'completed', 'cancelled', 'all'] %}<option
   value="{{ value }}"
   {{ 'selected' if selected_status == value }}
 >{{ value|title }}</option>{% endfor %}</select></label><label class="field">Category<select class="select" name="category"><option value="">All categories</option>{% for value in categories %}<option
@@ -59,10 +69,10 @@
   value="{{ end_date }}"
 ></label><button class="btn btn--primary" type="submit">Apply filters</button><a
   class="btn btn--ghost"
-  href="{{ url_for('coordinator.coordinator_dash') }}"
+  href="{{ url_for('coordinator.coordinator_dash', period=period.value) }}"
 >Clear</a></form></section>
   <div class="content-grid">
-    <section class="panel" data-tour-id="activity-workspace">
+    <section class="panel">
       <header class="panel__header">
         <div class="heading-with-tip">
           <h2>Campus activities</h2>
@@ -71,11 +81,11 @@
         <div class="panel__actions">
           <a
             class="btn btn--sm {{ 'btn--primary' if selected_status == 'upcoming' else 'btn--ghost' }}"
-            href="{{ url_for('coordinator.coordinator_dash', status='upcoming', category=selected_category, start_date=start_date, end_date=end_date) }}"
+            href="{{ url_for('coordinator.coordinator_dash', workspace=1, period=period.value, status='upcoming', category=selected_category, start_date=start_date, end_date=end_date) }}"
           >Upcoming</a>
           <a
             class="btn btn--sm {{ 'btn--primary' if selected_status == 'completed' else 'btn--ghost' }}"
-            href="{{ url_for('coordinator.coordinator_dash', status='completed', category=selected_category, start_date=start_date, end_date=end_date) }}"
+            href="{{ url_for('coordinator.coordinator_dash', workspace=1, period=period.value, status='completed', category=selected_category, start_date=start_date, end_date=end_date) }}"
           >Past</a>
         </div>
       </header>
@@ -90,7 +100,7 @@
               <th scope="col">Activity</th>
               <th scope="col">Date</th>
               <th scope="col">Location</th>
-              <th scope="col">Slots</th>
+              <th scope="col">Slots remaining / capacity</th>
               <th scope="col">Actions</th>
             </tr>
           </thead>
@@ -180,37 +190,6 @@
     <aside class="stack">
       <section class="panel">
         <div class="heading-with-tip">
-          <h2>Cancellation review</h2>
-          {{ info_tip('Cancellation review', 'Pending requests from registered volunteers at your campus. A request remains active until reviewed.') }}
-        </div>
-        <p>{{ pending_cancellations }} {{ 'request awaits' if pending_cancellations == 1 else 'requests await' }} your decision.</p>
-        <a
-          class="btn btn--outline"
-          data-tour-id="cancellations"
-          href="{{ url_for('coordinator.cancellation_requests') }}"
-        >Review requests</a>
-      </section>
-      <section class="panel">
-        <h2>Quick Actions</h2>
-        <div class="stack">
-          <a
-            class="btn btn--block btn--outline"
-            data-tour-id="attendance"
-            href="{{ url_for('coordinator.attendance') }}"
-          >
-            Track Attendance
-          </a>
-          <a
-            class="btn btn--block btn--outline"
-            data-tour-id="analytics"
-            href="{{ url_for('coordinator.analytics') }}"
-          >
-            View Analytics
-          </a>
-        </div>
-      </section>
-      <section class="panel">
-        <div class="heading-with-tip">
           <h2>Recent registrations</h2>
           {{ info_tip('Recent registrations', 'The latest activity sign-ups recorded for this campus. A registration does not confirm attendance.') }}
         </div>
@@ -226,11 +205,8 @@
       </section>
     </aside>
   </div>
-  </section>
-  <section class="dashboard-evidence" data-tour-id="target-progress"><header class="section-heading section-heading--compact"><h2>Supporting Evidence</h2><p>Use target progress to review outcomes after operational work is complete.</p></header><section class="panel"><header class="panel__header"><div><div class="heading-with-tip"><h2>Target progress</h2>{{ info_tip('Target progress', 'Actual participants are verified attendance, not registrations. Completion compares actual participants with a target when one is set.') }}</div><small>Actual participants are verified attendance, not registrations.</small></div></header><p class="table-scroll__hint" id="target-progress-scroll-hint">Swipe horizontally to view remaining columns.</p><div
-  class="table-scroll table-scroll--report"
-  tabindex="0"
-  aria-label="Target progress table"
-  aria-describedby="target-progress-scroll-hint"
-><table class="data-table data-table--report"><thead><tr><th scope="col">Activity</th><th scope="col">Registered</th><th scope="col">Actual participants</th><th scope="col">Cancelled</th><th scope="col">Target</th><th scope="col">Completion</th></tr></thead><tbody>{% for row in accomplishments %}<tr><td>{{ row.event.title }}</td><td>{{ row.registrations }}</td><td>{{ row.actual }}</td><td>{{ row.cancelled }}</td><td>{{ row.target or 'Not set' }}</td><td>{{ row.completion_percentage ~ '%' if row.completion_percentage is not none else 'Not set' }}</td></tr>{% else %}<tr><td colspan="6"><div class="empty-state">No activities match these filters.</div></td></tr>{% endfor %}</tbody></table></div></section></section>
+    </div>
+  </details>
+  <a class="btn btn--outline" href="{{ url_for('coordinator.activity_calendar') }}">Activity calendar</a>
+</div>
 {% endblock %}

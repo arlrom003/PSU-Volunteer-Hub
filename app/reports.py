@@ -81,7 +81,7 @@ def report_invalid():
 
 def build_events_report(campus_id=None, start_date=None, end_date=None,
                         category=None, sex=None, sdg_id=None, activity_name=None,
-                        campus_ids=None):
+                        campus_ids=None, attention=None, now=None, event_id=None):
     """Return (rows, summary) for the filtered event dataset.
 
     campus_id=None means all campuses. Coordinators must pass their own
@@ -89,9 +89,23 @@ def build_events_report(campus_id=None, start_date=None, end_date=None,
     campus_ids adds an intersecting allow-list: None is unrestricted, [] is
     empty, and a None entry includes activities without an assigned campus.
     """
+    from app.dashboard import ATTENTION_LABELS
     start, end = parse_date_range(start_date, end_date)
+    now = now or datetime.now()
+    if attention and attention not in ATTENTION_LABELS:
+        raise ReportError('Choose a valid attention filter.')
+    if attention == 'missed_targets' and sex:
+        raise ReportError('Clear the sex filter to review whole-activity participant targets.')
 
     query = Event.query
+    if event_id is not None:
+        try:
+            event_id = int(event_id)
+            if event_id <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            raise ReportError('Choose a valid activity record.')
+        query = query.filter(Event.id == event_id)
     if campus_id:
         query = query.filter(Event.campus_id == campus_id)
     if campus_ids is not None:
@@ -145,9 +159,32 @@ def build_events_report(campus_id=None, start_date=None, end_date=None,
         completed = completed_query.count()
         cancelled = Registration.query.filter_by(event_id=e.id, status='cancelled').count()
         target = e.target_participants
+        eligible = [registration for registration in e.registrations
+                    if registration.status != 'cancelled']
+        missing = sum(registration.attendance_record is None for registration in eligible)
+        unconfirmed = sum(bool(registration.attendance_record and
+                              registration.attendance_record.status == 'present' and
+                              registration.status != 'completed') for registration in eligible)
+        ended = now >= (e.end_date or e.date)
+        complete = ended and not missing and not unconfirmed
+        outcome_attended = valid.join(Attendance, Attendance.registration_id == Registration.id).filter(
+            Attendance.status == 'present').count()
+        if attention == 'pending_attendance' and not (ended and not complete):
+            continue
+        if attention == 'low_attendance' and not (complete and reg and outcome_attended / reg < .75):
+            continue
+        if attention == 'missed_targets' and not (complete and target and target > 0 and outcome_attended < target):
+            continue
         campus_name = e.campus.name if e.campus else ''
         rows.append({
             'event_id': e.id,
+            'campus_id': e.campus_id,
+            'end_date': e.end_date or e.date,
+            'ended': ended,
+            'attendance_complete': complete,
+            'missing_attendance': missing,
+            'unconfirmed_present': unconfirmed,
+            'outcome_attended': outcome_attended,
             'title': e.title,
             'date': e.date,
             'campus': campus_name,
@@ -160,7 +197,8 @@ def build_events_report(campus_id=None, start_date=None, end_date=None,
             'completed': completed,
             'cancelled': cancelled,
             'target_participants': target,
-            'completion_percentage': round(attended / target * 100, 1) if target else None,
+            'completion_percentage': round(outcome_attended / target * 100, 1)
+                                     if target and target > 0 and complete and not sex else None,
         })
         total_reg += reg
         total_psu += psu
@@ -171,7 +209,7 @@ def build_events_report(campus_id=None, start_date=None, end_date=None,
         total_target += target or 0
 
     summary = {
-        'event_count': len(events),
+        'event_count': len(rows),
         'total_registrations': total_reg,
         'total_psu': total_psu,
         'total_external': total_external,

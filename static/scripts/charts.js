@@ -17,7 +17,12 @@
   };
 
   const render = (node, type, data) => {
-    if (!window.Plotly || !data) return;
+    if (!node) return;
+    if (node.closest('details:not([open])')) return;
+    if (!window.Plotly || !data) {
+      node.innerHTML = '<p class="empty-state">Chart unavailable. Open the detailed values below.</p>';
+      return;
+    }
     let traces = [];
     let layout = { ...baseLayout };
     if (type === 'pie' || type === 'donut') {
@@ -28,20 +33,42 @@
       traces = [{ type: 'bar', x: data.labels, y: data.values,
         marker: { color: colors[0] }, name: data.name || 'Participation' }];
       layout = { ...layout, yaxis: { rangemode: 'tozero', gridcolor: '#e5e7eb' } };
+    } else if (type === 'grouped') {
+      traces = [
+        { type: 'bar', orientation: 'h', y: data.labels, x: data.primary, name: 'Registrations', marker: { color: colors[0] } },
+        { type: 'bar', orientation: 'h', y: data.labels, x: data.secondary, name: 'Verified attendance', marker: { color: colors[1], pattern: { shape: '/' } } },
+      ];
+      layout = { ...layout, barmode: 'group', height: Math.max(320, data.labels.length * 60 + 100),
+        margin: { t: 16, r: 16, b: 70, l: 90 },
+        xaxis: { rangemode: 'tozero', gridcolor: '#e5e7eb' },
+        yaxis: { type: 'category', autorange: 'reversed', automargin: true } };
     } else {
       traces = [
         { type: 'scatter', mode: 'lines+markers', x: data.labels,
           y: data.primary, name: data.primaryName || 'Registrations', line: { color: colors[0] } },
         { type: 'scatter', mode: 'lines+markers', x: data.labels,
-          y: data.secondary, name: data.secondaryName || 'Attended', line: { color: colors[1] } },
+          y: data.secondary, name: data.secondaryName || 'Attended', line: { color: colors[1], dash: 'dash' }, marker: { symbol: 'square' } },
       ];
-      layout = { ...layout, yaxis: { rangemode: 'tozero', gridcolor: '#e5e7eb' } };
+      layout = { ...layout, xaxis: { type: 'category', automargin: true },
+        yaxis: { rangemode: 'tozero', gridcolor: '#e5e7eb' } };
     }
     if (!data.values?.some(Number) && !data.primary?.some(Number) && !data.secondary?.some(Number)) {
       node.innerHTML = '<div class="empty-state">No chart data available.</div>';
       return;
     }
-    window.Plotly.react(node, traces, layout, config);
+    node.setAttribute('aria-busy', 'true');
+    if (!node.classList.contains('js-plotly-plot')) node.innerHTML = '<p>Loading chart…</p>';
+    const failed = () => {
+      node.innerHTML = '<p class="empty-state">Chart could not load. Open the detailed values below.</p>';
+      node.setAttribute('aria-busy', 'false');
+    };
+    try {
+      Promise.resolve(window.Plotly.react(node, traces, layout, config))
+        .then(() => {
+          node.querySelectorAll(':scope > p').forEach((message) => message.remove());
+          node.setAttribute('aria-busy', 'false');
+        }).catch(failed);
+    } catch (_) { failed(); }
   };
 
   document.querySelectorAll('[data-chart]').forEach((node) => {
@@ -54,4 +81,14 @@
     select.addEventListener('change', update);
     update();
   });
+  document.addEventListener('toggle', (event) => {
+    if (!(event.target instanceof HTMLDetailsElement) || !event.target.open) return;
+    event.target.querySelectorAll('[data-chart]').forEach((node) => {
+      render(node, node.dataset.chart, readData(node.dataset.source));
+    });
+    event.target.querySelectorAll('[data-chart-switch]').forEach((select) => {
+      render(document.getElementById(select.dataset.chartSwitch), 'line',
+        readData(select.dataset.source)?.[select.value]);
+    });
+  }, true);
 })();

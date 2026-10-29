@@ -1,166 +1,45 @@
 {% extends 'layouts/role_base.html' %}
-{% from 'partials/info_tip.html' import info_tip %}
-{% from 'partials/dashboard_ui.html' import metric %}
+{% from 'partials/dashboard_ui.html' import period_control, performance_metrics, findings, chart %}
 {% set tour_page = true %}
 {% block title %}Director Dashboard · PSU Volunteer Hub{% endblock %}
 {% block header_title %}Director Console{% endblock %}
 {% block header_subtitle %}University-wide oversight{% endblock %}
-
 {% block content %}
+<div class="dashboard-overview">
   <header class="page-heading">
-    <div>
-      <h1>University overview</h1>
-      <p>Review live participation, compare campus records, and monitor activity targets.</p>
-    </div>
-    <div class="panel__actions"><a
-  class="btn btn--primary"
-  data-tour-id="analytics"
-  href="{{ url_for('director.analytics') }}"
->Open analytics</a><a
-  class="btn btn--outline"
-  data-tour-id="calendar"
-  href="{{ url_for('director.activity_calendar') }}"
->Activity calendar</a></div>
+    <div><h1>University overview</h1><p>Complete attendance first, then review campus participation outcomes.</p></div>
+    <a class="btn btn--primary" data-tour-id="analytics" href="{{ url_for('director.analytics', start_date=period.start, end_date=period.end) }}">Open analytics</a>
   </header>
-  <section
-    class="summary-strip"
-    aria-label="University participation summary"
-    data-tour-id="summary"
-  >
-    {{ metric('Verified attendance', live_summary.attended, 'Present attendance records across live activities. Repeat participation is counted once per activity.') }}
-    {{ metric('Completed participations', live_summary.completed, 'Live participation records marked completed after an activity.') }}
-    {{ metric('Live registrations', live_summary.registrations, 'Non-cancelled sign-ups for live activities. Each activity registration is counted separately.') }}
-    {{ metric('Attendance rate', ((live_summary.attended / live_summary.registrations * 100)|round(1) if live_summary.registrations else 0) ~ '%', 'Present attendance divided by non-cancelled live registrations.') }}
-  </section>
-  <section class="panel leadership-attention" aria-labelledby="leadership-attention-title">
-    <header class="section-heading section-heading--compact">
-      <div>
-        <h2 id="leadership-attention-title">Leadership attention</h2>
-        <p>Live activities that may need university-level follow-up.</p>
-      </div>
-      <small>Current live scope</small>
-    </header>
-    {% if leadership_attention.total %}
-      <div class="leadership-attention__grid">
-        <article class="leadership-attention__item">
-          <strong>{{ leadership_attention.attendance_pending }}</strong>
-          <h3>Attendance pending</h3>
-          <p>Completed activities still need attendance records reviewed.</p>
-          <a href="{{ url_for('director.analytics', view='live') }}#detailed-report">Review in Analytics</a>
-        </article>
-        <article class="leadership-attention__item">
-          <strong>{{ leadership_attention.below_target }}</strong>
-          <h3>Below target</h3>
-          <p>Activities have not reached their participant targets.</p>
-          <a href="{{ url_for('director.analytics', view='live') }}#detailed-report">Review in Analytics</a>
-        </article>
-        <article class="leadership-attention__item">
-          <strong>{{ leadership_attention.low_attendance }}</strong>
-          <h3>Low attendance</h3>
-          <p>Verified attendance is below 75% of non-cancelled registrations.</p>
-          <a href="{{ url_for('director.analytics', view='live') }}#supporting-insights">Review in Analytics</a>
-        </article>
-        <article class="leadership-attention__item">
-          <strong>{{ leadership_attention.no_recent_activity }}</strong>
-          <h3>No recent activity</h3>
-          <p>No activity appears for these campuses in the current scope.</p>
-          <a href="{{ url_for('director.analytics', view='live') }}#filters">Review in Analytics</a>
-        </article>
-      </div>
-    {% else %}
-      <div class="empty-state">No issues in this scope.</div>
-    {% endif %}
-  </section>
-  <section class="panel chart-panel" data-tour-id="campus-comparison">
-    <header class="panel__header">
-      <div>
-        <div class="heading-with-tip">
-          <h2>Campus comparison</h2>
-          {{ info_tip('Campus comparison', 'Live campus registrations are shown when available. Otherwise the comparison shows imported historical aggregate participations, labelled below. Repeat activity participation does not identify unique people.') }}
-        </div>
-        <small>{{ 'Live registrations across all dates' if live_summary.registrations else 'Historical aggregate participations, 2020–2025' }}</small>
-      </div>
-      <a
-        class="btn btn--sm btn--outline"
-        href="{{ url_for('director.analytics') }}"
-      >Full Analytics</a>
-    </header>
-    <p class="table-scroll__hint" id="director-target-progress-scroll-hint">Swipe horizontally to view remaining columns.</p>
-    <div
-      id="director-campus-chart"
-      class="chart"
-      data-chart="bar"
-      data-source="director-campus-data"
-      aria-label="Leading campuses bar chart"
-    ></div>
-    {% if live_summary.registrations %}
-      {% set campus_chart_data = {'labels': live_campuses|map(attribute='campus')|list, 'values': live_campuses|map(attribute='registrations')|list, 'name': 'Registrations'} %}
-    {% else %}
-      {% set campus_chart_data = {
-        'labels': campus_stats|map(attribute='campus')|list,
-        'values': campus_stats|map(attribute='participations')|list,
-        'name': 'Participations'
-      } %}
-    {% endif %}
-    <script id="director-campus-data" type="application/json">{{ campus_chart_data|tojson }}</script>
-    <details class="chart-fallback">
-      <summary>View detailed values</summary>
-      <ol>
-        {% if live_summary.registrations %}
-          {% for campus in live_campuses %}<li><strong>{{ campus.campus }}</strong>: {{ campus.registrations }} registered, {{ campus.attended }} attended</li>{% endfor %}
-        {% else %}
-          {% for campus in campus_stats %}
-            <li>
-              <strong>{{ campus.campus }}</strong>:
-              {{ campus.activities }} activities,
-              {{ '{:,}'.format(campus.participations) }} participations
-            </li>
-          {% else %}
-            <li>No historical participation data is available.</li>
-          {% endfor %}
-        {% endif %}
-      </ol>
+
+  {{ findings(attention_items, 'director.analytics', {'start_date': period.start, 'end_date': period.end}, director=true, scope='Attendance work across all dates; outcomes ' ~ period.label, landing=true) }}
+  {% if inactive_campuses %}
+    <details class="campus-follow-up-disclosure">
+      <summary>{{ inactive_campuses|length }} {{ 'campus has' if inactive_campuses|length == 1 else 'campuses have' }} no activities in this period</summary>
+      <p>{{ period.label }}. This describes activity records, not campus performance.</p>
+      <ul class="campus-follow-up">
+        {% for campus in inactive_campuses %}<li><strong>{{ campus.name }}</strong><a class="btn btn--outline" href="{{ url_for('director.analytics', campus=campus.id, campus_mode='include', start_date=period.start, end_date=period.end) }}">Review records<span class="sr-only"> for {{ campus.name }}</span></a></li>{% endfor %}
+      </ul>
     </details>
-  </section>
+  {% endif %}
 
-  <section class="panel" data-tour-id="target-progress">
-    <header class="panel__header">
-      <div>
-        <div class="heading-with-tip">
-          <h2>Recent target progress</h2>
-          {{ info_tip('Target progress', 'Actual participants are verified attendance. Completion compares actual participants with an activity target when one is set.') }}
-        </div>
-        <small>Actual participants are verified present attendance.</small>
-      </div>
-    </header>
-    <div
-      class="table-scroll table-scroll--report"
-      tabindex="0"
-      aria-label="Recent target progress table"
-      aria-describedby="director-target-progress-scroll-hint"
-    ><table class="data-table data-table--report"><thead><tr><th scope="col">Activity</th><th scope="col">Campus</th><th scope="col">Actual</th><th scope="col">Target</th><th scope="col">Completion</th></tr></thead><tbody>{% for row in accomplishments %}<tr><td>{{ row.event.title }}</td><td>{{ row.event.campus.code if row.event.campus else 'PSU' }}<span class="sr-only">{{ row.event.campus.name if row.event.campus else '' }}</span></td><td>{{ row.actual }}</td><td>{{ row.target or 'Not set' }}</td><td>{{ row.completion_percentage ~ '%' if row.completion_percentage is not none else 'Not set' }}</td></tr>{% else %}<tr><td colspan="5"><div class="empty-state">No live activity progress is available.</div></td></tr>{% endfor %}</tbody></table></div>
-  </section>
+  {{ period_control(period, 'director.director_dash') }}
+  <div data-tour-id="target-progress">{{ performance_metrics(performance, period, deltas) }}</div>
+  <div data-tour-id="campus-comparison">
+    {{ chart('Registrations and attendance by campus', 'Sign-ups compared with recorded present attendance. Incomplete attendance remains provisional.', period.label, 'director-campus-chart', {'labels': dashboard_data.campuses|map(attribute='label')|list, 'primary': dashboard_data.campuses|map(attribute='registrations')|list, 'secondary': dashboard_data.campuses|map(attribute='attended')|list}, 'grouped') }}
+  </div>
 
-  <nav
-    class="dashboard-links"
-    aria-label="Director evidence workspaces"
-  >
-    <a
-      href="{{ url_for('director.analytics', view='live') }}#supporting-insights"
-      data-tour-id="recognition"
-    ><strong>Recognition and demographics</strong><span>Review verified PSU participation and internal demographic responses.</span></a>
-    <a
-      href="{{ url_for('director.analytics', view='live') }}#filters"
-      data-tour-id="reports"
-    ><strong>Reports and exports</strong><span>Choose a reporting scope and download CSV or PDF.</span></a>
-    <a
-      href="{{ url_for('director.analytics', view='historical') }}"
-    ><strong>Historical Source Records</strong><span>Review imported 2020–2025 aggregate participations separately from live outcomes.</span></a>
-  </nav>
+  <details class="secondary-workspace">
+    <summary>Calendar, reports, and supporting evidence</summary>
+    <nav class="overview-links" aria-label="Director evidence workspaces">
+      <a class="btn btn--outline" data-tour-id="calendar" href="{{ url_for('director.activity_calendar') }}">Activity calendar</a>
+      <a class="btn btn--outline" data-tour-id="reports" href="{{ url_for('director.analytics', start_date=period.start, end_date=period.end) }}#filters">Reports and exports</a>
+      <a class="btn btn--outline" data-tour-id="recognition" href="{{ url_for('director.analytics') }}#supporting-insights">Recognition and demographics</a>
+      <a class="btn btn--outline" href="{{ url_for('director.analytics', view='historical') }}">Historical source records</a>
+    </nav>
+  </details>
+</div>
 {% endblock %}
 {% block scripts %}
-  <script
-    src="{{ url_for('static', filename='scripts/plotly-5.24.1.min.js') }}"
-  ></script>
+  <script src="{{ url_for('static', filename='scripts/plotly-5.24.1.min.js') }}"></script>
   <script src="{{ url_for('static', filename='scripts/charts.js') }}"></script>
 {% endblock %}

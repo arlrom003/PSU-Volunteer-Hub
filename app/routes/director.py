@@ -15,7 +15,7 @@ from app.recommendation.analytics import AnalyticsAggregator
 from app.models import db
 from app.models.event import Event, Campus, SdgGoal
 from app.models.user import User
-from app.dashboard import summarize_report, summarize_leadership_attention
+from app.dashboard import summarize_report, resolve_period, dashboard_evidence, consolidate_attention
 from app.reports import (
     build_events_report, render_csv, render_pdf, resolve_campus,
     ReportError, _build_meta, parse_date_range)
@@ -63,37 +63,21 @@ def _historical_filters():
 @login_required
 @roles_required('director', 'admin')
 def director_dash():
-    campus_stats = AnalyticsAggregator.historical_campus_stats()
-    total_volunteers = sum(c['participations'] for c in campus_stats)
-    total_activities = sum(c['activities'] for c in campus_stats)
-    top_campuses = campus_stats[:3]
-    live_summary = AnalyticsAggregator.participation_summary()
-    live_campuses = AnalyticsAggregator.campus_comparison()
-    accomplishments = AnalyticsAggregator.activity_accomplishments(limit=5)
-    attention_accomplishments = AnalyticsAggregator.activity_accomplishments(limit=None)
-    live_events = Event.query.order_by(Event.date.desc()).all()
     now = datetime.now()
-    attendance_pending = 0
-    active_campus_ids = set()
-    for event in live_events:
-        active_campus_ids.add(event.campus_id)
-        if (event.end_date or event.date) >= now:
-            continue
-        eligible = [r for r in event.registrations if r.status != 'cancelled']
-        if eligible and sum(1 for r in eligible if r.attendance_record) < len(eligible):
-            attendance_pending += 1
-    leadership_attention = summarize_leadership_attention(
-        live_campuses, attention_accomplishments, attendance_pending,
-        Campus.query.order_by(Campus.name).all(), active_campus_ids)
-    return render_template('director/Director_Dash.html',
-                           campus_stats=campus_stats,
-                           total_volunteers=total_volunteers,
-                           total_activities=total_activities,
-                           top_campuses=top_campuses,
-                           live_summary=live_summary,
-                           live_campuses=live_campuses,
-                           accomplishments=accomplishments,
-                           leadership_attention=leadership_attention)
+    try:
+        period = resolve_period(request.args, now)
+    except ReportError as exc:
+        flash(str(exc), 'error')
+        return redirect(url_for('director.director_dash'))
+    evidence = dashboard_evidence({}, period, now)
+    pending, _ = build_events_report(attention='pending_attendance', now=now)
+    pending.sort(key=lambda row: (row['end_date'], row['event_id']))
+    evidence['attention_items'] = consolidate_attention(evidence['performance'], pending)
+    active = {row['campus_id'] for row in evidence['evidence_rows']}
+    return render_template('director/Director_Dash.html', **evidence,
+                           inactive_campuses=[campus for campus in Campus.query.order_by(Campus.name).all()
+                                              if campus.id not in active],
+                           dashboard_data=summarize_report(evidence['evidence_rows']))
 
 
 @director_bp.route('/director/calendar')
@@ -137,6 +121,11 @@ def analytics():
     if analytics_view not in {'live', 'historical'}:
         analytics_view = 'live'
     try:
+        period = resolve_period(request.args)
+    except ReportError as exc:
+        flash('Use valid report dates, with the start date on or before the end date. ' + str(exc), 'error')
+        return redirect(url_for('director.analytics'))
+    try:
         parse_date_range(request.args.get('start_date'), request.args.get('end_date'))
     except ReportError:
         flash('Use valid report dates, with the start date on or before the end date.', 'error')
@@ -153,8 +142,8 @@ def analytics():
 
     # Live event-based report (date / campus / category filters)
     selected_campuses, campus_mode, live_campus_ids, campus_error = _live_campuses(campuses)
-    live_start = request.args.get('start_date', '').strip()
-    live_end = request.args.get('end_date', '').strip()
+    live_start = period['start']
+    live_end = period['end']
     live_category = request.args.get('category', '').strip()
     live_sex = request.args.get('sex', '').strip().lower()
     live_sex = live_sex if live_sex in (
@@ -163,16 +152,13 @@ def analytics():
     if live_sdg_id and db.session.get(SdgGoal, live_sdg_id) is None:
         live_sdg_id = None
     try:
-        live_rows, live_summary = build_events_report(
-            campus_ids=live_campus_ids, start_date=live_start,
-            end_date=live_end, category=live_category, sex=live_sex,
-            sdg_id=live_sdg_id, activity_name=request.args.get('activity_name', ''))
+        evidence = dashboard_evidence(dict(campus_ids=live_campus_ids,
+            category=live_category, sex=live_sex, sdg_id=live_sdg_id,
+            activity_name=request.args.get('activity_name', ''),
+            attention=request.args.get('attention', ''), event_id=request.args.get('event_id')), period)
+        live_rows, live_summary = evidence['evidence_rows'], evidence['evidence_summary']
     except ReportError:
-        live_rows, live_summary = [], {
-            'event_count': 0, 'total_registrations': 0,
-            'total_attended': 0, 'total_completed': 0,
-            'total_psu': 0, 'total_external': 0}
-        flash('Use a valid date range for the activity report.', 'error')
+        abort(400, description='Choose valid report dates and attention filters. Clear the sex filter to review participant targets.')
     dashboard_data = summarize_report(live_rows)
     report_page = max(request.args.get('page', 1, type=int), 1)
     report_page_size = 10
@@ -213,6 +199,7 @@ def analytics():
         key: values for key, values in query.items()
         if key not in {'view', 'page', 'start_year', 'end_year', 'activity_type'}
     }
+    live_query.update(start_date=[live_start], end_date=[live_end])
     if not campus_error:
         live_query['campus'] = [str(campus_id) for campus_id in selected_campuses]
         live_query['campus_mode'] = [campus_mode]
@@ -222,6 +209,7 @@ def analytics():
             historical_query[key] = value
 
     return render_template('director/Director_impact_anlaytics_dash.html',
+                            **evidence,
                             analytics_view=analytics_view,
                             demographics=demographics,
                             historical_summary=historical_summary,
@@ -355,8 +343,8 @@ def _university_report_payload():
     selected, mode, allowed, error = _live_campuses(campuses)
     if error:
         abort(400, description=error)
-    start = request.args.get('start_date', '').strip()
-    end = request.args.get('end_date', '').strip()
+    export_period = resolve_period(dict(request.args, period=request.args.get('period', 'all')))
+    start, end = export_period['start'], export_period['end']
     category = request.args.get('category', '').strip()
     sex = request.args.get('sex', '').strip().lower()
     sdg_id = request.args.get('sdg_id', type=int)
@@ -366,7 +354,8 @@ def _university_report_payload():
         category=category, sex=sex if sex in (
             'male', 'female', 'prefer_not_to_say', 'unrecorded') else None,
         sdg_id=sdg.id if sdg else None,
-        activity_name=request.args.get('activity_name', ''))
+        activity_name=request.args.get('activity_name', ''),
+        attention=request.args.get('attention', ''), event_id=request.args.get('event_id'))
     names = [campus.name for campus in campuses if campus.id in selected]
     scope = ('All Campuses' if not selected else
              ('All campuses except: ' if mode == 'exclude' else 'Selected campuses: ') + ', '.join(names))
@@ -376,6 +365,11 @@ def _university_report_payload():
         start_date=start, end_date=end, category=category,
         role_label=role_label)
     meta['activity_name'] = request.args.get('activity_name', '').strip()
+    if sex in ('male', 'female', 'prefer_not_to_say', 'unrecorded'):
+        meta['scope'] += ' / Sex response: ' + sex.replace('_', ' ') + ' / Target achievement unavailable for a participant subset'
+    if request.args.get('attention'):
+        from app.dashboard import ATTENTION_LABELS
+        meta['scope'] += ' / ' + ATTENTION_LABELS[request.args['attention']]
     return rows, summary, meta
 
 

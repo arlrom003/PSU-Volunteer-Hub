@@ -1,6 +1,6 @@
 {% extends 'layouts/role_base.html' %}
 {% from 'partials/info_tip.html' import info_tip %}
-{% from 'partials/dashboard_ui.html' import heading, metric, chart %}
+{% from 'partials/dashboard_ui.html' import heading, metric, chart, period_control, performance_metrics, findings %}
 {% set active_page = "analytics" %}
 {% block title %}Campus Analytics · PSU Volunteer Hub{% endblock %}
 {% block header_title %}Coordinator Console{% endblock %}
@@ -17,6 +17,7 @@
       href="{{ url_for('coordinator.attendance') }}"
     >Manage attendance</a>
   </header>
+  {{ period_control(period, 'coordinator.analytics', report_query) }}
   <section
     class="panel dashboard-filters"
     aria-labelledby="filter-heading"
@@ -26,6 +27,7 @@
       {{ info_tip('Report filters', 'Activity name, dates, and category scope the KPI strip, comparison charts, engagement trend, and filtered activity report. Forecast and attendance snapshot have their own labelled campus scope.') }}
     </div>
     <form class="filter-row" method="get">
+      {% if request.args.get('event_id') %}<input type="hidden" name="event_id" value="{{ request.args.get('event_id') }}">{% endif %}
       <label class="field">Activity name
         <input type="search" name="activity_name" autocomplete="off"
           value="{{ request.args.get('activity_name', '') }}"
@@ -36,14 +38,14 @@
         Start date<input
   type="date"
   name="start_date"
-  value="{{ request.args.get('start_date', '') }}"
+  value="{{ period.start }}"
 >
       </label>
       <label class="field">
         End date<input
   type="date"
   name="end_date"
-  value="{{ request.args.get('end_date', '') }}"
+  value="{{ period.end }}"
 >
       </label>
       <label class="field">
@@ -59,6 +61,7 @@
           {% endfor %}
         </select>
       </label>
+      <label class="field">Attention<select name="attention"><option value="">All activity records</option>{% for key, label in attention_labels.items() %}<option value="{{ key }}"{{ ' selected' if request.args.get('attention') == key }}>{{ label }}</option>{% endfor %}</select></label>
       <button class="btn btn--primary" type="submit">Apply Filters</button>
       <a
         class="btn btn--ghost"
@@ -68,38 +71,25 @@
     <div class="dashboard-export-actions">
       <a
         class="btn btn--outline"
-        href="{{ url_for('coordinator.export_events_pdf', **request.args) }}"
+        href="{{ url_for('coordinator.export_events_pdf', **report_query) }}"
       >Export PDF</a>
       <a
         class="btn btn--outline"
-        href="{{ url_for('coordinator.export_events_csv', **request.args) }}"
+        href="{{ url_for('coordinator.export_events_csv', **report_query) }}"
       >Export CSV</a>
     </div>
   </section>
-  <header class="section-heading section-heading--compact">
-    <h2>Overview</h2>
-    <p>Use the selected report scope to compare participation and verified attendance.</p>
-  </header>
-  <section
-    class="summary-strip"
-    aria-label="Filtered campus activity totals"
-  >
-    {{ metric('Activities', report_summary.event_count, 'Activities at your campus matching the selected activity name, dates, and category.') }}
-    {{ metric('Registrations', report_summary.total_registrations, 'Non-cancelled campus registrations in the report scope. Each activity sign-up is counted separately.') }}
-    {{ metric('Verified attendance', report_summary.total_attended, 'Present attendance records in the filtered campus activities. Repeat participation counts per activity.') }}
-    {{ metric('Completed participations', report_summary.total_completed, 'Participation records marked completed within the filtered campus activities.') }}
-    {{ metric('Attendance rate', ((report_summary.total_attended / report_summary.total_registrations * 100)|round(1) if report_summary.total_registrations else 0) ~ '%', 'Present attendance divided by non-cancelled registrations for this report scope.') }}
-  </section>
+  {{ findings(attention_items, 'coordinator.analytics', report_query) }}
+  {{ performance_metrics(performance, period, deltas) }}
+  {% if request.args.get('attention') %}<p class="scope-note">Showing: {{ attention_labels[request.args.get('attention')] }}. <a href="{{ url_for('coordinator.analytics', **dict(report_query, attention='')) }}">Show all activity records in this scope</a></p>{% endif %}
+  <details class="secondary-workspace"><summary>Category and participant breakdowns</summary>
   <div class="analytics-grid">
     {{ chart('Participation by Category', 'Registrations grouped by activity category using the selected report dates and category.', 'Selected campus report scope', 'campusCategories', {'labels': dashboard_data.categories|map(attribute='label')|list, 'values': dashboard_data.categories|map(attribute='registrations')|list}) }}
     {{ chart('Participant Type', 'Registrations linked to PSU accounts compared with external community registrations without a PSU account.', 'Selected campus report scope', 'campusComposition', {'labels': ['PSU', 'External'], 'values': [report_summary.total_psu, report_summary.total_external]}, 'donut') }}
   </div>
-  <header class="section-heading section-heading--compact">
-    <h2>Performance</h2>
-    <p>Review activity-level outcomes before opening supplementary campus evidence.</p>
-  </header>
+  </details>
   <section class="panel">
-    {{ heading('Engagement Trend', 'Activity-date periods comparing non-cancelled registrations with present attendance for the selected campus report filters.', 'Select a monthly or weekly view. Detailed values remain available without charts.') }}
+    {{ heading('Registrations and attendance', 'Activity-date periods comparing non-cancelled registrations with present attendance for the selected campus report filters.', 'Select a monthly or weekly view. Incomplete attendance remains provisional.') }}
     <label class="field field--inline">
       View<select
   data-chart-switch="engagementChart"
@@ -109,13 +99,14 @@
       <option value="weekly">Weekly</option>
       </select>
     </label>
-    <p class="table-scroll__hint" id="activity-performance-scroll-hint">Swipe horizontally to view remaining columns.</p>
+    <p class="scope-note" id="engagement-values-hint">Detailed chart values are available below.</p>
     <div
       class="chart"
       id="engagementChart"
       role="img"
       aria-label="Filtered campus engagement trend"
-    ></div>
+      aria-describedby="engagement-values-hint"
+    ><p>Detailed values are available below. Charts require JavaScript.</p></div>
     <details class="chart-fallback">
       <summary>View monthly and weekly values</summary>
       {% for period, data in [('Monthly', dashboard_data.monthly), ('Weekly', dashboard_data.weekly)] %}
@@ -124,14 +115,15 @@
     </details>
     <script id="campusEngagementData" type="application/json">{{ {'monthly': dashboard_data.monthly, 'weekly': dashboard_data.weekly}|tojson }}</script>
   </section>
+  <details class="secondary-workspace"><summary>Activity attendance rates</summary>
   <section class="panel">
     <header class="panel__header">
       <div>
         <div class="heading-with-tip">
-          <h2>Activity Performance</h2>
-          {{ info_tip('Activity performance', 'Registration, verified attendance, and conversion outcomes for campus activities in the selected filters.') }}
+          <h2>Activity attendance rates</h2>
+          {{ info_tip('Activity performance', 'Registrations, verified attendance, and attendance rates for campus activities. Rates require fully recorded attendance.') }}
         </div>
-        <small>Registration, attendance, and conversion outcomes</small>
+        <small>Registrations and attendance; rates require fully recorded attendance.</small>
       </div>
     </header>
     <p class="table-scroll__hint" id="activity-performance-scroll-hint">Swipe horizontally to view remaining columns.</p>
@@ -148,7 +140,7 @@
             <th scope="col">Category</th>
             <th scope="col">Registrations</th>
             <th scope="col">Attended</th>
-            <th scope="col">Conversion</th>
+            <th scope="col">Attendance rate</th>
           </tr>
         </thead>
         <tbody>
@@ -158,7 +150,7 @@
               <td>{{ activity.category }}</td>
               <td>{{ activity.registrations }}</td>
               <td>{{ activity.attended }}</td>
-              <td>{{ (activity.attended / activity.registrations * 100)|round(1) if activity.registrations else 0 }}%</td>
+              <td>{% if activity.attendance_complete and activity.registrations %}{{ (activity.outcome_attended / activity.registrations * 100)|round(1) }}%{% else %}Not available<small>{{ 'No registrations' if activity.attendance_complete else 'Attendance not complete' }}</small>{% endif %}</td>
             </tr>
           {% else %}
             <tr>
@@ -172,6 +164,8 @@
     </div>
   </section>
 
+  </details>
+  {% set supporting_evidence %}
   <details class="analytics-disclosure">
     <summary><span>Supporting Insights</span><small>Forecasts and recent attendance that use their own labelled campus scope.</small></summary>
     <div class="analytics-disclosure__content">
@@ -249,11 +243,13 @@
     </div>
   </details>
 
+  {% endset %}
   <header class="section-heading section-heading--compact">
     <h2>Detailed Report</h2>
     <p>Rows below match the current filters and the CSV/PDF exports.</p>
   </header>
-  <section class="panel" id="filtered-report">
+  <section class="panel" id="decision-records">
+    <span id="filtered-report"></span>
     {{ heading('Filtered Activity Report', 'Activity-level counts matching the selected activity name, campus report dates, and category. PDF and CSV downloads contain these same rows.', 'Restricted to ' ~ campus_name ~ ' Campus') }}
     <p class="table-scroll__hint" id="filtered-campus-report-scroll-hint">Swipe horizontally to view remaining columns.</p>
     <div
@@ -273,6 +269,9 @@
             <th scope="col">External</th>
             <th scope="col">Attended</th>
             <th scope="col">Completed</th>
+            <th scope="col">Attendance state</th>
+            <th scope="col">Participant target</th>
+            <th scope="col">Next action</th>
           </tr>
         </thead>
         <tbody>
@@ -286,10 +285,13 @@
               <td>{{ row.external_registrations }}</td>
               <td>{{ row.attended }}</td>
               <td>{{ row.completed }}</td>
+              <td>{% if not row.ended %}Upcoming or in progress{% elif row.attendance_complete %}Fully recorded{% else %}{{ row.missing_attendance }} missing; {{ row.unconfirmed_present }} awaiting completion{% endif %}</td>
+              <td>{% if row.target_participants and row.target_participants > 0 %}{{ row.outcome_attended }} / {{ row.target_participants }}<small>{{ 'Provisional until attendance is complete' if not row.attendance_complete else 'Target reached' if row.outcome_attended >= row.target_participants else 'Target not reached' }}</small>{% else %}Not set{% endif %}</td>
+              <td><a class="btn btn--outline" href="{{ url_for('coordinator.attendance', event_id=row.event_id) }}">{{ 'Complete attendance' if row.ended and not row.attendance_complete else 'Review attendance' }}<span class="sr-only"> for {{ row.title }}</span></a></td>
             </tr>
           {% else %}
             <tr>
-              <td colspan="8">
+              <td colspan="11">
                 <div class="empty-state">No activities match the current filters.</div>
               </td>
             </tr>
@@ -299,6 +301,7 @@
     </div>
 
   </section>
+  {{ supporting_evidence }}
 {% endblock %}
 {% block scripts %}
   <script

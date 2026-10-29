@@ -715,7 +715,7 @@ class TestPhaseOnePublicExperience:
         _login_as(client, coordinator_id)
         coordinator_body = client.get('/coordinator_dash').get_data(as_text=True)
         assert 'class="info-tip"' in coordinator_body
-        assert 'About attendance rate' in coordinator_body
+        assert 'How these numbers are counted' in coordinator_body
 
     def test_director_analytics_renders_info_tips(self, client, app):
         director_id = _create_user(app, email='tips-director@test.com', role='director', campus_id=1)
@@ -775,10 +775,10 @@ class TestPhaseOnePublicExperience:
         _login_as(client, coordinator_id)
 
         body = client.get('/coordinator_dash').get_data(as_text=True)
-        assert body.index('Needs Attention') < body.index('Activity Workspace')
-        assert body.index('Activity Workspace') < body.index('Supporting Evidence')
-        assert 'Review requests' in body
-        assert 'Track attendance' in body
+        assert body.index('Needs attention') < body.index('Participation outcomes')
+        assert body.index('Participation outcomes') < body.index('Manage activities')
+        assert 'Review requests' not in body
+        assert 'No activities need follow-up in this scope.' in body
 
     def test_guide_dismissal_only_updates_the_authenticated_user(self, client, app):
         current_id = _create_user(app, email='guide-current@test.com', role='coordinator', campus_id=1)
@@ -2501,7 +2501,7 @@ class TestReportingSystem:
         def record(sender, template, context, **extra):
             captured.append(context)
         query = [('campus', '1'), ('campus', '2'), ('campus', '1'), ('campus', '4'),
-                 ('campus_mode', mode), ('campus_id', '9')]
+                 ('campus_mode', mode), ('campus_id', '9'), ('period', 'all')]
         with template_rendered.connected_to(record, app):
             response = client.get('/analytics', query_string=query)
         assert response.status_code == 200
@@ -2713,7 +2713,7 @@ class TestReportingSystem:
         def record(sender, template, context, **extra):
             captured.append(context)
 
-        query = {'activity_name': '  cLeAnUp  ', 'campus_id': '2'}
+        query = {'activity_name': '  cLeAnUp  ', 'campus_id': '2', 'period': 'all'}
         path = '/analytics' if role == 'director' else '/coordinator_analytics'
         with template_rendered.connected_to(record, app):
             response = client.get(path, query_string=query)
@@ -3525,7 +3525,7 @@ class TestAnalytics:
         _login_as(client, did)
         resp = client.get('/analytics')
         assert resp.status_code == 200
-        assert 'Cross-Campus Comparison' in resp.data.decode()
+        assert 'Registrations and attendance by campus' in resp.data.decode()
 
     def test_live_activity_report_paginates_at_ten_rows(self, app, client):
         director_id = _create_user(app, email='page_dir@test.com', role='director')
@@ -3536,8 +3536,8 @@ class TestAnalytics:
             db.session.commit()
         _login_as(client, director_id)
 
-        first_page = client.get('/analytics?page=1').get_data(as_text=True)
-        second_page = client.get('/analytics?page=2').get_data(as_text=True)
+        first_page = client.get('/analytics?period=all&page=1').get_data(as_text=True)
+        second_page = client.get('/analytics?period=all&page=2').get_data(as_text=True)
         assert 'Page 1' in first_page and 'Page 2' in first_page
         assert 'Coastal Cleanup Drive' not in first_page
         assert 'Coastal Cleanup Drive' in second_page

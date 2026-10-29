@@ -21,7 +21,7 @@ from app.models.notification import notify
 from app.utils.audit import log_activity
 from app.models.user import SystemSetting
 from app.recommendation.analytics import AnalyticsAggregator
-from app.dashboard import summarize_report
+from app.dashboard import summarize_report, resolve_period, dashboard_evidence, consolidate_attention
 from app.reports import (
     build_events_report, render_csv, render_pdf, ReportError, parse_date_range)
 from datetime import datetime, timedelta
@@ -187,11 +187,22 @@ def _parse_event_schedule(form):
 @login_required
 @role_required('coordinator')
 def coordinator_dash():
+    campus_id = _coordinator_campus_id()
+    # Workspace dates remain independent of the performance-period selector.
+    try:
+        period = resolve_period({'period': request.args.get('period', 'this_month')})
+    except ReportError as exc:
+        flash(str(exc), 'error')
+        return redirect(url_for('coordinator.coordinator_dash'))
+    evidence = dashboard_evidence({'campus_id': campus_id}, period)
+    pending, _ = build_events_report(campus_id=campus_id, attention='pending_attendance')
+    pending.sort(key=lambda row: (row['end_date'], row['event_id']))
+    evidence['attention_items'] = consolidate_attention(evidence['performance'], pending)
     status = request.args.get('status', 'upcoming')
     category = request.args.get('category', '').strip()
     start_date = request.args.get('start_date', '').strip()
     end_date = request.args.get('end_date', '').strip()
-    events = Event.query.filter_by(campus_id=current_user.campus_id)
+    events = Event.query.filter_by(campus_id=campus_id)
     if status == 'upcoming':
         events = events.filter(Event.date >= datetime.now())
     elif status == 'completed':
@@ -208,42 +219,28 @@ def coordinator_dash():
                                        else Event.date <= date_value.replace(hour=23, minute=59, second=59))
             except ValueError:
                 flash('Use valid dates when filtering activities.', 'error')
-    events = events.order_by(Event.date.desc()).all()
-    upcoming_count = sum(1 for e in events if e.date >= datetime.now())
-    # Centralized campus-scoped participation metrics (Phase 18): keeps the
-    # dashboard consistent with the analytics page, CSV and PDF exports.
-    summary = AnalyticsAggregator.participation_summary(
-        campus_id=current_user.campus_id)
-    accomplishments = AnalyticsAggregator.activity_accomplishments(
-        campus_id=current_user.campus_id, start_date=start_date,
-        end_date=end_date, category=category, limit=None)
-    visible_event_ids = {event.id for event in events}
-    accomplishments = [row for row in accomplishments
-                       if row['event'].id in visible_event_ids]
+    events = events.order_by(Event.date.asc() if status == 'upcoming' else Event.date.desc()).all()
+    next_events = Event.query.filter(Event.campus_id == campus_id,
+        Event.date >= datetime.now()).order_by(Event.date, Event.id).limit(3).all()
     pending_cancellations = CancellationRequest.query.join(Registration).join(Event).filter(
-        Event.campus_id == current_user.campus_id,
+        Event.campus_id == campus_id,
         CancellationRequest.status == 'pending').count()
     recent_activities = Registration.query.filter(
         Registration.event_id.in_([e.id for e in events])
     ).order_by(Registration.registered_at.desc()).limit(5).all() if events else []
 
-    # Context the template needs but the route was not passing
     campus_name = current_user.campus.name if current_user.campus else 'Campus'
 
     return render_template('coordinator/Coordinator_dash.html',
+                            **evidence,
+                            next_events=next_events,
                             events=events,
-                            upcoming_count=upcoming_count,
-                            total_volunteers=summary['unique_volunteers'],
-                            attendance_rate=summary['attendance_rate'],
-                            registrations=summary['registrations'],
                             recent_activities=recent_activities,
                             selected_status=status,
                             selected_category=category, start_date=start_date,
                             end_date=end_date, categories=_activity_categories(),
-                            accomplishments=accomplishments,
                             pending_cancellations=pending_cancellations,
-                            campus_name=campus_name,
-                            campus_total_attended=summary['attended'])
+                            campus_name=campus_name)
 
 
 @coordinator_bp.route('/coordinator/calendar')
@@ -307,7 +304,7 @@ def cancellation_requests():
             flash(f'Cancellation request {decision}.', 'success')
         return redirect(url_for('coordinator.cancellation_requests', status=status))
     return render_template('coordinator/cancellation_requests.html',
-                           requests=query.order_by(CancellationRequest.requested_at.desc()).all(),
+                           requests=query.order_by(CancellationRequest.requested_at.asc(), CancellationRequest.id.asc()).all(),
                            selected_status=status)
 
 
@@ -748,14 +745,15 @@ def download_milestone(milestone_id):
 @login_required
 @role_required('coordinator')
 def export_events_csv():
-    start_date = request.args.get('start_date', '').strip()
-    end_date = request.args.get('end_date', '').strip()
     category = request.args.get('category', '').strip()
     try:
+        export_period = resolve_period(dict(request.args, period=request.args.get('period', 'all')))
+        start_date, end_date = export_period['start'], export_period['end']
         rows, summary = build_events_report(
             campus_id=_coordinator_campus_id(), start_date=start_date,
             end_date=end_date, category=category,
-            activity_name=request.args.get('activity_name', ''))
+            activity_name=request.args.get('activity_name', ''),
+            attention=request.args.get('attention', ''), event_id=request.args.get('event_id'))
     except ReportError:
         abort(400)
     campus_name = current_user.campus.name if current_user.campus else 'Campus'
@@ -768,6 +766,9 @@ def export_events_csv():
         'role_label': 'Coordinator',
     }
     meta['activity_name'] = request.args.get('activity_name', '').strip()
+    if request.args.get('attention'):
+        from app.dashboard import ATTENTION_LABELS
+        meta['scope'] += ' / ' + ATTENTION_LABELS[request.args['attention']]
     csv_data = render_csv(rows, summary, meta)
     return Response(csv_data, mimetype='text/csv', headers={
         'Content-Disposition': 'attachment;filename=campus_events.csv'})
@@ -778,14 +779,15 @@ def export_events_csv():
 @role_required('coordinator')
 def export_events_pdf():
     from app.reports import _build_meta
-    start_date = request.args.get('start_date', '').strip()
-    end_date = request.args.get('end_date', '').strip()
     category = request.args.get('category', '').strip()
     try:
+        export_period = resolve_period(dict(request.args, period=request.args.get('period', 'all')))
+        start_date, end_date = export_period['start'], export_period['end']
         rows, summary = build_events_report(
             campus_id=_coordinator_campus_id(), start_date=start_date,
             end_date=end_date, category=category,
-            activity_name=request.args.get('activity_name', ''))
+            activity_name=request.args.get('activity_name', ''),
+            attention=request.args.get('attention', ''), event_id=request.args.get('event_id'))
     except ReportError:
         abort(400)
     campus_name = current_user.campus.name if current_user.campus else 'Campus'
@@ -795,6 +797,9 @@ def export_events_pdf():
         start_date=start_date, end_date=end_date, category=category,
         role_label='Coordinator')
     meta['activity_name'] = request.args.get('activity_name', '').strip()
+    if request.args.get('attention'):
+        from app.dashboard import ATTENTION_LABELS
+        meta['scope'] += ' / ' + ATTENTION_LABELS[request.args['attention']]
     pdf_data = render_pdf(rows, summary, meta)
     return Response(pdf_data, mimetype='application/pdf', headers={
         'Content-Disposition': 'attachment;filename=campus_events.pdf'})
@@ -811,7 +816,7 @@ def _date_range_label(start_date, end_date):
 def analytics():
     campus_id = _coordinator_campus_id()
     try:
-        parse_date_range(request.args.get('start_date'), request.args.get('end_date'))
+        period = resolve_period(request.args)
     except ReportError:
         flash('Use valid report dates, with the start date on or before the end date.', 'error')
         return redirect(url_for('coordinator.analytics'))
@@ -826,15 +831,21 @@ def analytics():
         Event.campus_id == campus_id,
         Event.category.isnot(None)).distinct().order_by(Event.category).all()]
 
-    start_date = request.args.get('start_date', '').strip()
-    end_date = request.args.get('end_date', '').strip()
+    start_date = period['start']
+    end_date = period['end']
     category = request.args.get('category', '').strip()
-    report_rows, report_summary = build_events_report(
-        campus_id=campus_id, start_date=start_date,
-        end_date=end_date, category=category,
-        activity_name=request.args.get('activity_name', ''))
+    try:
+        evidence = dashboard_evidence(dict(campus_id=campus_id, category=category,
+            activity_name=request.args.get('activity_name', ''),
+            attention=request.args.get('attention', ''), event_id=request.args.get('event_id')), period)
+    except ReportError as exc:
+        abort(400, description=str(exc))
+    report_rows, report_summary = evidence['evidence_rows'], evidence['evidence_summary']
+    report_query = request.args.to_dict()
+    report_query.update(start_date=start_date, end_date=end_date)
 
     return render_template('coordinator/coordinator_analytics.html',
+                            **evidence, report_query=report_query,
                             campus_name=campus_name,
                             forecast_data=forecast_data,
                             attendance_summary=attendance_summary,

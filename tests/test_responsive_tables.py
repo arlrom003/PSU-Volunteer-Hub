@@ -28,8 +28,6 @@ def test_operational_tables_keep_visible_mobile_labels():
 def test_report_tables_keep_scroll_guidance_and_semantics():
     templates = (
         'coordinator/coordinator_analytics.html',
-        'coordinator/Coordinator_dash.html',
-        'director/Director_Dash.html',
         'director/Director_impact_anlaytics_dash.html',
         'admin/Admin_mngmt_dash.html',
         'admin/policy_management.html',
@@ -71,9 +69,9 @@ def test_activity_workspace_groups_secondary_and_destructive_actions():
 
 def test_director_leadership_attention_reflows_without_extra_tables():
     content = _template('director/Director_Dash.html')
-    styles = (ROOT / 'static' / 'styles' / 'director.css').read_text(encoding='utf-8')
+    styles = (ROOT / 'static' / 'styles' / 'role-shell.css').read_text(encoding='utf-8')
 
-    assert 'Leadership attention' in content
-    assert content.count('Review in Analytics') == 4
-    assert '.leadership-attention__grid' in styles
-    assert '@media (max-width: 560px)' in styles
+    assert 'findings(attention_items' in content
+    assert 'inactive_campuses' in content
+    assert '.attention-list > li' in styles
+    assert '@media (max-width: 640px)' in styles
