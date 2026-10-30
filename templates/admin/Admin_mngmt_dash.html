@@ -1,5 +1,28 @@
 {% extends 'layouts/role_base.html' %}
 {% set tour_page = true %}
+{% macro page_controls(label) %}
+  {% if pagination.total %}
+    <p class="admin-list-summary">Showing {{ pagination.first }}–{{ pagination.last }} of {{ pagination.total }}</p>
+  {% endif %}
+  {% if pagination.pages > 1 %}
+    <nav
+      class="pagination admin-pagination"
+      aria-label="{{ label }}"
+    >
+      {% if pagination.has_prev %}<a
+  class="btn btn--outline"
+  rel="prev"
+  href="{{ url_for('admin.admin_dash', tab=active_tab, campus_id=selected_campus, page=pagination.prev_num) }}"
+>Previous Page</a>{% endif %}
+      <span aria-current="page">Page {{ pagination.page }} of {{ pagination.pages }}</span>
+      {% if pagination.has_next %}<a
+  class="btn btn--outline"
+  rel="next"
+  href="{{ url_for('admin.admin_dash', tab=active_tab, campus_id=selected_campus, page=pagination.next_num) }}"
+>Next Page</a>{% endif %}
+    </nav>
+  {% endif %}
+{% endmacro %}
 {% block title %}Admin Dashboard · PSU Volunteer Hub{% endblock %}
 {% block header_title %}Administration{% endblock %}
 {% block header_subtitle %}System and user management{% endblock %}
@@ -14,6 +37,7 @@
       <p>Manage users, campuses, and system configuration.</p>
     </div>
     <form method="get">
+      <input type="hidden" name="tab" value="{{ active_tab }}">
       <select
         class="select"
         name="campus_id"
@@ -41,15 +65,18 @@
   <nav class="admin-tabs" aria-label="Administration sections">
     <a
       class="btn btn--sm {{ 'btn--primary' if active_tab == 'users' else 'btn--ghost' }}"
-      href="{{ url_for('admin.admin_dash', tab='users') }}"
+      {% if active_tab == 'users' %}aria-current="page"{% endif %}
+      href="{{ url_for('admin.admin_dash', tab='users', campus_id=selected_campus) }}"
     >Active Users</a>
     <a
       class="btn btn--sm {{ 'btn--primary' if active_tab == 'deactivated' else 'btn--ghost' }}"
-      href="{{ url_for('admin.admin_dash', tab='deactivated') }}"
-    >Deactivated Users ({{ deactivated_users|length }})</a>
+      {% if active_tab == 'deactivated' %}aria-current="page"{% endif %}
+      href="{{ url_for('admin.admin_dash', tab='deactivated', campus_id=selected_campus) }}"
+    >Deactivated Users ({{ deactivated_total }})</a>
     <a
       class="btn btn--sm {{ 'btn--primary' if active_tab == 'audit' else 'btn--ghost' }}"
-      href="{{ url_for('admin.admin_dash', tab='audit') }}"
+      {% if active_tab == 'audit' %}aria-current="page"{% endif %}
+      href="{{ url_for('admin.admin_dash', tab='audit', campus_id=selected_campus) }}"
     >Activity Log</a>
   </nav>
   {% if active_tab == 'users' %}
@@ -139,6 +166,7 @@
           </tbody>
         </table>
       </div>
+      {{ page_controls("User pages") }}
     </section>
     <section class="panel">
       <header class="panel__header">
@@ -294,6 +322,7 @@
     </tbody>
     </table>
     </div>
+    {{ page_controls("Deactivated user pages") }}
     </section>
   {% else %}
     <section class="panel" id="activity-log">
@@ -303,14 +332,21 @@
           <small>Most recent administrative changes. Entries are retained when a related account is removed.</small>
         </div>
       </header>
-      <p class="table-scroll__hint" id="admin-activity-log-scroll-hint">Swipe horizontally to view remaining columns.</p>
+      <p
+        class="table-scroll__hint"
+        id="admin-activity-log-scroll-hint"
+      >
+        Swipe horizontally to view remaining columns.
+      </p>
       <div
         class="table-scroll table-scroll--report"
         tabindex="0"
         aria-label="Administrative activity log"
         aria-describedby="admin-activity-log-scroll-hint"
       >
-        <table class="data-table data-table--report data-table--report-wide">
+        <table
+          class="data-table data-table--report data-table--report-wide"
+        >
           <thead>
             <tr>
               <th scope="col">When</th>
@@ -332,7 +368,8 @@
   {% else %}<tr><td colspan="5"><div class="empty-state">No administrative activity has been recorded yet.</div></td></tr>{% endfor %}
     </tbody>
     </table>
-      </div>
+    </div>
+    {{ page_controls("Activity log pages") }}
     </section>
   {% endif %}
 {% endblock %}

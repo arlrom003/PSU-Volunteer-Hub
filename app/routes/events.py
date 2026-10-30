@@ -8,6 +8,7 @@ from flask import (Blueprint, render_template, request, redirect, url_for,
 from flask_login import login_required, current_user
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.exc import IntegrityError
 from app.models import db
 from app.models.user import VolunteerProfile
@@ -172,7 +173,8 @@ def opportunities():
     category = (request.args.get('category', type=str) or '').strip() or None
     search = (request.args.get('search', type=str) or '').strip() or None
     now = datetime.now()
-    query = Event.query.filter(Event.date >= now, Event.slots > 0)
+    query = Event.query.options(joinedload(Event.campus), selectinload(Event.registrations)
+                               ).filter(Event.date >= now, Event.slots > 0)
     upcoming_count = query.count()
     if filter_error:
         query = query.filter(db.false())
@@ -372,7 +374,8 @@ def cancel_registration(registration_id):
 def volunteer_dash():
     profile = VolunteerProfile.query.filter_by(user_id=current_user.id).first()
     upcoming_events = Event.query.filter(
-        Event.date >= datetime.now()).order_by(Event.date.asc()).all()
+        Event.date >= datetime.now()).options(selectinload(Event.required_skills_rel)
+        ).order_by(Event.date.asc()).all()
     recommendations = get_recommendations(
         profile, upcoming_events, campus_id=current_user.campus_id)
     total_activities = Registration.query.filter_by(
@@ -385,7 +388,10 @@ def volunteer_dash():
     ).order_by(Event.date.asc()).limit(5).all()
     recent_activity = Registration.query.filter_by(user_id=current_user.id).order_by(
         Registration.registered_at.desc()).limit(5).all()
-    registrations = Registration.query.filter_by(user_id=current_user.id).join(Event).all()
+    registrations = Registration.query.filter_by(user_id=current_user.id).join(Event).options(
+        joinedload(Registration.event).joinedload(Event.campus),
+        joinedload(Registration.cancellation_request).joinedload(CancellationRequest.reviewed_by),
+        joinedload(Registration.attendance_record)).all()
     upcoming_registrations = [r for r in registrations if (
         r.status in ('pending', 'confirmed') and r.event.date > now)]
     history_registrations = [r for r in registrations if r not in upcoming_registrations]

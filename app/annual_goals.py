@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 from collections import defaultdict
 import operator
+from sqlalchemy.orm import joinedload
 
 from app.models.annual_plan import (AnnualPlan, AnnualIndicator, AnnualTarget,
                                    AnnualResult, AnnualGoalProposal)
@@ -77,7 +78,9 @@ def registrations(year, campus_id=None, event_ids=None):
         query = query.filter(Event.campus_id == campus_id)
     if event_ids is not None:
         query = query.filter(Event.id.in_(event_ids))
-    return query.all()
+    return query.options(joinedload(Registration.attendance_record),
+                         joinedload(Registration.user),
+                         joinedload(Registration.external_participant)).all()
 
 
 def participation(year, campus_id=None, basis='verified_attendance'):

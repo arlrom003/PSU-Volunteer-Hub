@@ -8,6 +8,7 @@ from flask import Flask, request, redirect, url_for, session
 from flask_login import LoginManager, current_user
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
+from sqlalchemy.orm import joinedload, selectinload
 from app.models import db
 from app.models.user import User, SystemSetting
 from app.models.event import (Event, Registration, Attendance, Milestone,
@@ -71,7 +72,10 @@ def create_app(config_name=None):
 
     @app.after_request
     def set_security_headers(response):
-        if response.status_code >= 400 or session.get('_user_id') or request.endpoint in (
+        public_asset = request.endpoint == 'favicon' or (
+            request.endpoint == 'static' and
+            (request.view_args or {}).get('filename', '').startswith(('styles/', 'scripts/', 'assets/')))
+        if response.status_code >= 400 or (not public_asset and session.get('_user_id')) or request.endpoint in (
                 'auth.session_activity', 'auth.login', 'auth.forgot_password', 'auth.reset_password'):
             response.headers['Cache-Control'] = 'no-store'
         if config_name == 'production':
@@ -96,7 +100,7 @@ def create_app(config_name=None):
     @app.before_request
     def require_current_terms():
         """Keep authenticated users on the active Terms revision."""
-        if request.endpoint == 'static' or getattr(request.routing_exception, 'code', None) == 404:
+        if request.endpoint in ('static', 'favicon') or getattr(request.routing_exception, 'code', None) == 404:
             return None
         if current_user.is_authenticated and session.get('auth_version') != current_user.auth_version:
             return end_session('Your session expired because your password was changed. Sign in again.')
@@ -185,11 +189,12 @@ def create_app(config_name=None):
         featured_events = Event.query.filter(
             Event.date > now,
             Event.slots > 0,
+        ).options(joinedload(Event.campus), selectinload(Event.registrations)
         ).order_by(Event.date.asc()).limit(6).all()
         completed_at = db.func.coalesce(Event.end_date, Event.date)
         completed_events = Event.query.filter(
             completed_at <= now,
-        ).order_by(completed_at.desc(), Event.id.desc()).limit(3).all()
+        ).options(joinedload(Event.campus)).order_by(completed_at.desc(), Event.id.desc()).limit(3).all()
         historical_summary = {
             'activities': HistoricalActivity.query.count(),
             'participants': int(db.session.query(db.func.sum(

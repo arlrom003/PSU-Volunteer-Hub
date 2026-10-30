@@ -198,18 +198,30 @@ class AnalyticsAggregator:
         }
 
     @staticmethod
+    def _event_attendance_counts(events):
+        event_ids = [event.id for event in events]
+        registrations = dict(db.session.query(
+            Registration.event_id, db.func.count(Registration.id)).filter(
+            Registration.event_id.in_(event_ids)).group_by(Registration.event_id).all())
+        attendance = dict(db.session.query(
+            Attendance.event_id, db.func.count(Attendance.id)).filter(
+            Attendance.event_id.in_(event_ids), Attendance.status == 'present'
+        ).group_by(Attendance.event_id).all())
+        return registrations, attendance
+
+    @staticmethod
     def attendance_summary(campus_id=None, limit=10):
         """Return [{event, registered, attended, rate}] for completed/upcoming events."""
         event_query = Event.query
         if campus_id:
             event_query = event_query.filter_by(campus_id=campus_id)
         events = event_query.order_by(Event.date.desc()).limit(limit).all()
+        registrations, attendance = AnalyticsAggregator._event_attendance_counts(events)
 
         results = []
         for e in events:
-            registered = Registration.query.filter_by(event_id=e.id).count()
-            attended = Attendance.query.filter_by(
-                event_id=e.id, status='present').count()
+            registered = registrations.get(e.id, 0)
+            attended = attendance.get(e.id, 0)
             rate = round((attended / registered * 100),
                          1) if registered > 0 else 0
             results.append({'event': e, 'registered': registered,
@@ -551,26 +563,33 @@ class AnalyticsAggregator:
                 User.role == 'volunteer', Attendance.status == 'present',
                 Event.date >= start, Event.date < end).group_by(
                     User.id, User.name, Campus.name).all()
+        completed_counts = dict(db.session.query(
+            Registration.user_id, db.func.count(Registration.id)).join(Event).filter(
+            Registration.status == 'completed', Event.date >= start, Event.date < end
+        ).group_by(Registration.user_id).all())
         volunteer_rows = []
         for user_id, name, campus, attendance in volunteers:
-            completed = Registration.query.join(Event).filter(
-                Registration.user_id == user_id,
-                Registration.status == 'completed', Event.date >= start,
-                Event.date < end).count()
+            completed = completed_counts.get(user_id, 0)
             volunteer_rows.append({'name': name, 'campus': campus or 'Unassigned',
                                    'attendance': int(attendance), 'completed': completed})
         volunteer_rows.sort(key=lambda row: (-row['attendance'], -row['completed'], row['name']))
 
+        campus_registrations = dict(db.session.query(
+            Event.campus_id, db.func.count(Registration.id)).join(
+            Registration, Registration.event_id == Event.id).filter(
+            Registration.user_id.isnot(None), Registration.status != 'cancelled',
+            Event.date >= start, Event.date < end).group_by(Event.campus_id).all())
+        campus_attendance = dict(db.session.query(
+            Event.campus_id, db.func.count(Attendance.id)).join(
+            Attendance, Attendance.event_id == Event.id).filter(
+            Attendance.user_id.isnot(None), Attendance.status == 'present',
+            Event.date >= start, Event.date < end).group_by(Event.campus_id).all())
         campus_rows = []
         for campus in Campus.query.order_by(Campus.name).all():
-            registrations = Registration.query.join(Event).filter(
-                Registration.user_id.isnot(None), Registration.status != 'cancelled',
-                Event.campus_id == campus.id, Event.date >= start, Event.date < end).count()
+            registrations = campus_registrations.get(campus.id, 0)
             if not registrations:
                 continue
-            attended = Attendance.query.join(Event).filter(
-                Attendance.user_id.isnot(None), Attendance.status == 'present',
-                Event.campus_id == campus.id, Event.date >= start, Event.date < end).count()
+            attended = campus_attendance.get(campus.id, 0)
             campus_rows.append({'name': campus.name, 'registrations': registrations,
                                 'attendance': attended,
                                 'rate': round(attended / registrations * 100, 1)})
@@ -620,12 +639,12 @@ class AnalyticsAggregator:
         if campus_id:
             past_query = past_query.filter(Event.campus_id == campus_id)
         past_events = past_query.all()
+        registrations, attendance = AnalyticsAggregator._event_attendance_counts(past_events)
 
         X_train, y_train = [], []
         for e in past_events:
-            total_regs = Registration.query.filter_by(event_id=e.id).count()
-            attended = Attendance.query.filter_by(
-                event_id=e.id, status='present').count()
+            total_regs = registrations.get(e.id, 0)
+            attended = attendance.get(e.id, 0)
             if total_regs > 0:
                 X_train.append([e.slots])
                 y_train.append(attended / total_regs)

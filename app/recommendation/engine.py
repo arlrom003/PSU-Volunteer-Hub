@@ -14,6 +14,7 @@ Cosine similarity = |shared terms| / sqrt(|user terms| * |event terms|)
 import re
 from datetime import datetime
 from sklearn.metrics.pairwise import cosine_similarity
+from sqlalchemy.orm import selectinload
 from app.models.event import Event, RecommendationLog, Registration
 from app.models.user import User, Skill, Interest
 from app.models import db
@@ -100,25 +101,27 @@ def get_recommendations(volunteer_profile, events=None, top_n=5, campus_id=None)
     user_interests = normalize_terms(volunteer_profile.interest_list)
     user_terms = user_skills | user_interests
 
-    registered_ids = {r.event_id for r in user.registrations if r.status not in (
-        'cancelled', 'rejected')}
+    history = db.session.query(Registration.event_id, Registration.status, Event.category).outerjoin(
+        Event, Event.id == Registration.event_id).filter(Registration.user_id == user.id).all()
+    registered_ids = {event_id for event_id, status, _ in history
+                      if status not in ('cancelled', 'rejected')}
 
     # Participation history: categories the volunteer has actually joined weigh
     # toward future events of the same category (cold-start-safe: empty if none).
     history_categories = set()
-    for reg in user.registrations:
-        if reg.status in ('cancelled', 'rejected'):
+    for _, status, category in history:
+        if status in ('cancelled', 'rejected'):
             continue
-        ev = reg.event
-        if ev and ev.category:
-            history_categories |= normalize_terms([ev.category])
+        if category:
+            history_categories |= normalize_terms([category])
 
     if events is not None:
         candidates = [e for e in events if e.id not in registered_ids]
     else:
         candidates = Event.query.filter(
             db.not_(Event.id.in_(registered_ids))
-        ).filter(Event.date >= datetime.now()).order_by(Event.date.asc()).limit(50).all()
+        ).filter(Event.date >= datetime.now()).options(selectinload(Event.required_skills_rel)
+        ).order_by(Event.date.asc()).limit(50).all()
 
     scored = []
     for event in candidates:

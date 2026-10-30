@@ -11,6 +11,7 @@ from PIL import Image, UnidentifiedImageError
 from werkzeug.utils import secure_filename
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, Response, abort, send_from_directory
 from flask_login import login_required, current_user
+from sqlalchemy.orm import selectinload
 from app.models import db
 from app.models.event import (ActivityCategory, Event, EventAnnouncement,
                               Registration, Attendance, Campus, Milestone,
@@ -256,7 +257,8 @@ def coordinator_dash():
                                        else Event.date <= date_value.replace(hour=23, minute=59, second=59))
             except ValueError:
                 flash('Use valid dates when filtering activities.', 'error')
-    events = events.order_by(Event.date.asc() if status == 'upcoming' else Event.date.desc()).all()
+    events = events.options(selectinload(Event.sdgs), selectinload(Event.registrations)).order_by(
+        Event.date.asc() if status == 'upcoming' else Event.date.desc()).all()
     calendar = _campus_calendar(campus_id, request.args.get('calendar_year', type=int),
                                 request.args.get('calendar_month', type=int), dashboard=True)
     pending_cancellations = CancellationRequest.query.join(Registration).join(Event).filter(

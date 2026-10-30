@@ -8,8 +8,20 @@
 
 .admin-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin: 20px 0;
+}
+
+.admin-list-summary {
+  margin-top: 16px;
+  color: var(--on-surface-variant);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-pagination {
+  margin-top: 16px;
+  font-variant-numeric: tabular-nums;
 }
 
 .admin-category {

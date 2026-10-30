@@ -19,6 +19,7 @@ from app.models import db
 from app.models.user import VolunteerProfile, Skill, Interest
 from app.models.event import Registration, Event, Attendance
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
 from app.recommendation.engine import get_recommendations
 from app.utils.decorators import role_required
 
@@ -208,6 +209,7 @@ def profile_page():
 
     # ── Analytics: registration history (for the table on this page) ───
     registrations = Registration.query.filter_by(user_id=current_user.id)\
+        .options(joinedload(Registration.event), joinedload(Registration.attendance_record))\
         .order_by(Registration.registered_at.desc()).limit(5).all()
 
     # ── Analytics: cosine-similarity recommendations ────────────────────

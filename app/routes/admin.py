@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, abort, Response, current_app, session)
 from flask_login import login_required, current_user, logout_user
+from sqlalchemy.orm import joinedload
 from app.models import db
 from app.models.user import User, SystemSetting, VolunteerProfile, PasswordResetToken
 from app.models.event import ActivityCategory, Campus, Event
@@ -62,12 +63,29 @@ def admin_dash():
     if active_tab not in ('users', 'deactivated', 'audit'):
         active_tab = 'users'
     campus_id = request.args.get('campus_id', type=int)
-    query = User.query
+    query = User.query.options(joinedload(User.campus))
     if campus_id:
         query = query.filter(User.campus_id == campus_id)
-    users = query.filter(User._is_active.is_(True)).order_by(User.created_at.desc()).all()
-    deactivated_users = User.query.filter(
-        User._is_active.is_(False)).order_by(User.deactivated_at.asc()).all()
+    page = max(request.args.get('page', 1, type=int) or 1, 1)
+    users, deactivated_users, audit_logs = [], [], []
+    deactivated_total = User.query.filter(User._is_active.is_(False)).count()
+    if active_tab == 'users':
+        page_query = query.filter(User._is_active.is_(True)).order_by(User.created_at.desc(), User.id.desc())
+    elif active_tab == 'deactivated':
+        page_query = query.filter(User._is_active.is_(False)).order_by(User.deactivated_at.asc(), User.id.asc())
+    else:
+        page_query = AuditLog.query.options(joinedload(AuditLog.actor)).order_by(
+            AuditLog.created_at.desc(), AuditLog.id.desc())
+    pagination = page_query.paginate(page=page, per_page=25, error_out=False)
+    if page > max(pagination.pages, 1):
+        return redirect(url_for('admin.admin_dash', tab=active_tab, campus_id=campus_id,
+                                page=max(pagination.pages, 1)))
+    if active_tab == 'users':
+        users = pagination.items
+    elif active_tab == 'deactivated':
+        deactivated_users = pagination.items
+    else:
+        audit_logs = pagination.items
     now = datetime.utcnow()
     for user in deactivated_users:
         deactivated_at = user.deactivated_at or user.created_at
@@ -82,7 +100,6 @@ def admin_dash():
     except Exception:
         database_status = 'Unavailable'
     server_status = {'database': database_status}
-    audit_logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(100).all()
     campuses = Campus.query.all()
     categories = ActivityCategory.query.order_by(ActivityCategory.name).all()
     return render_template('admin/Admin_mngmt_dash.html',
@@ -95,6 +112,8 @@ def admin_dash():
                            campuses=campuses,
                            categories=categories,
                            deactivated_users=deactivated_users,
+                           deactivated_total=deactivated_total,
+                           pagination=pagination,
                            active_tab=active_tab)
 
 
