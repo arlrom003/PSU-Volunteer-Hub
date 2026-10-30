@@ -8,6 +8,17 @@ The working tagline is: **“Serve with purpose. See the impact.”**
 
 Use clear Filipino-English wording where it improves comprehension, but retain English labels for institutional reports and data fields. Replace the volunteer-facing word **Register** with **Join Now**; keep `Registration` as the internal data term.
 
+30 October addition: the guarded `reset-and-seed-demo` command replaces
+marked demonstration records while preserving existing accounts/passwords.
+Generates 750 participating internal volunteers, 200 events, 5,000 registrations,
+4,000 attendance, 200 external volunteers and 150 cancellation requests. Uses
+existing campus/catalogue/schema data; synthetic demographics are illustrative.
+Isolated CLI/import/provisioning checks: 15 passed in 27.58 seconds. See
+`DEMO_DATASET_QA.md`. Publication of this command is authorized to `thesis/main`;
+hosted deployment and database execution remain unverified. Earlier deployment
+results below do not cover this command; unrelated local changes are excluded.
+
+
 ## Latest delivery status (23 October 2026)
 
 Publication follow-up: the user approved commit/push of the test reconciliation

@@ -1,5 +1,19 @@
 # PSU Volunteer Hub — Continuation Handoff
 
+## Demonstration dataset command (30 October 2026)
+
+`reset-and-seed-demo --database railway` provides a read-only
+`--dry-run` preview and explicit typed target confirmation. It preserves all
+existing login accounts/passwords, including the required student, coordinator
+and director accounts, and replaces only marked demo records. The new fixture
+contains 200 events, 5,000 registrations, 4,000 attendance, 200 external volunteers,
+150 cancellation requests and SDG mappings across the existing campuses.
+Focused isolated CLI/import/provisioning checks: 15 passed in 27.58 seconds.
+See `DEMO_DATASET_QA.md` for exact scope, target checks, limitations and commands.
+Publication of this command, tests and related documentation is authorized to
+`thesis/main`. Hosted deployment and database execution remain unverified.
+Unrelated security/recovery changes remain local and outside this publication.
+
 ## Start here in a new chat
 
 The user can say: **Read HANDOFF.md and continue from the current local files.**

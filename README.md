@@ -177,6 +177,11 @@ flask seed-demo-analytics
 
 The historical import and demo seed are idempotent. Historical imports remain separate from live activity data.
 
+For the larger, account-preserving fixture replacement, see
+[`DEMO_DATASET_QA.md`](DEMO_DATASET_QA.md). The separate Railway demo app must
+receive that code before `reset-and-seed-demo --database railway` is available.
+Use its `--dry-run` preview to verify the demo database target before replacement.
+
 ## Policies and cancellations
 
 Policy source texts are included in `docs/TERMS_OF_USE_v1.0.txt` and
