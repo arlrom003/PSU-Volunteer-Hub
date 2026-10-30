@@ -93,11 +93,13 @@
   {{ findings(attention_items, 'director.analytics', live_query, director=true) }}
   {{ performance_metrics(performance, period, deltas) }}
   {% if request.args.get('attention') %}<p class="scope-note">Showing: {{ attention_labels[request.args.get('attention')] }}. <a href="{{ url_for('director.analytics', **dict(live_query, attention='')) }}">Show all activity records in this scope</a></p>{% endif %}
-  <div class="analytics-comparisons">
+  <details class="analytics-disclosure" id="participation-breakdowns">
+    <summary><span>Participation Breakdowns</span><small>Campus and category comparisons, participant types, and participation trends.</small></summary>
+    <div class="analytics-disclosure__content">
+  <div class="analytics-grid">
     {{ chart('Registrations and attendance by campus', 'Compare sign-ups with recorded present attendance. Records awaiting completion remain provisional.', period.label, 'campusComparison', {'labels': dashboard_data.campuses|map(attribute='label')|list, 'primary': dashboard_data.campuses|map(attribute='registrations')|list, 'secondary': dashboard_data.campuses|map(attribute='attended')|list}, 'grouped') }}
-    <details class="secondary-workspace"><summary>Participation by category</summary>
     {{ chart('Participation by Category', 'Non-cancelled registrations grouped by activity category using the live report filters.', 'Selected live report scope', 'categoryComparison', {'labels': dashboard_data.categories|map(attribute='label')|list, 'values': dashboard_data.categories|map(attribute='registrations')|list}) }}
-    </details>
+    {{ chart('PSU and external registrations', 'PSU registrations are linked to platform accounts. External registrations are community volunteers without a PSU account. Sex filtering includes PSU records only.', 'Selected live report scope', 'registrationComposition', {'labels': ['PSU', 'External'], 'values': [live_summary.total_psu, live_summary.total_external]}, 'donut') }}
   </div>
   <section class="panel">
     {{ heading('Registrations and attendance', 'Activity-date periods comparing non-cancelled registrations with present attendance in the live report scope.', 'The same filters apply to the chart and its detailed values. Incomplete attendance remains provisional.') }}
@@ -124,6 +126,8 @@
     </details>
     <script id="engagementData" type="application/json">{{ {'monthly': dashboard_data.monthly, 'weekly': dashboard_data.weekly}|tojson }}</script>
   </section>
+    </div>
+  </details>
   {% set supporting_evidence %}
   <details class="analytics-disclosure" id="supporting-insights">
     <summary><span>Supporting Insights</span><small>Recognition, demographics, profile context, and supplementary measures.</small></summary>
@@ -169,10 +173,7 @@
     </section>
   {% endif %}
 
-  <div class="analytics-grid">
     {{ chart('SDG mapping', 'Counts matching activities tagged with each SDG. An activity can contribute to several goals; tags describe intended alignment rather than proven impact.', 'Activities in the live report scope', 'sdgMapping', {'labels': dashboard_data.sdgs|map(attribute=0)|list, 'values': dashboard_data.sdgs|map(attribute=1)|list}) }}
-    {{ chart('PSU and external registrations', 'PSU registrations are linked to platform accounts. External registrations are community volunteers without a PSU account. Sex filtering includes PSU records only.', 'Selected live report scope', 'registrationComposition', {'labels': ['PSU', 'External'], 'values': [live_summary.total_psu, live_summary.total_external]}, 'donut') }}
-  </div>
   <section class="panel"><header class="panel__header"><div><div class="heading-with-tip"><h2>Verified participants by affiliation</h2>{{ info_tip('Participants by affiliation', 'All-time present PSU attendance grouped by affiliation, scoped to the selected home campus and affiliation.') }}</div><small>All dates; selected home campus and affiliation.</small></div></header><p class="table-scroll__hint" id="affiliation-participation-scroll-hint">Swipe horizontally to view remaining columns.</p><div
   class="table-scroll table-scroll--report"
   tabindex="0"
@@ -195,10 +196,9 @@
   </details>
 
   {% endset %}
-  <details class="analytics-disclosure" id="detailed-report" open>
-    <summary><span>Detailed Live Report</span><small>Campus comparisons, activity performance, and paginated activity rows.</small></summary>
+  <details class="analytics-disclosure" id="detailed-report"{{ ' open' if request.args.get('page') or request.args.get('event_id') or request.args.get('attention') }}>
+    <summary><span>Detailed Activity Report</span><small>Campus outcomes, activity attendance rates, and paginated activity rows.</small></summary>
     <div class="analytics-disclosure__content">
-  <details class="secondary-workspace"><summary>Campus and activity attendance rates</summary>
   <section class="panel">
     {{ heading('Campus attendance outcomes', 'Rates use only ended activities with fully recorded attendance. Counts include every selected activity.', 'Selected live report scope') }}
     <p class="table-scroll__hint" id="campus-comparison-scroll-hint">Swipe horizontally to view remaining columns.</p>
@@ -244,7 +244,6 @@
       </table>
     </div>
   </section>
-  </details>
   <section class="panel" id="decision-records">
     <span id="live-report"></span>
     {{ heading('Live Activity Report', 'Activity-level counts matching the live filters. Exports include all matching rows, while this table shows ten per page.', 'Ten activities per page. CSV and PDF include the complete filtered report.') }}
@@ -302,16 +301,16 @@
       <nav class="pagination" aria-label="Live activity report pages">
         {% if report_page > 1 %}<a
   class="btn btn--outline"
-  href="{{ url_for('director.analytics', **dict(live_navigation_query, page=report_page - 1)) }}"
+  href="{{ url_for('director.analytics', **dict(live_navigation_query, page=report_page - 1)) }}#decision-records"
 >Previous</a>{% endif %}
         {% for page_number in range(1, report_total_pages + 1) %}<a
   class="btn {{ 'btn--primary' if page_number == report_page else 'btn--outline' }}"
-  href="{{ url_for('director.analytics', **dict(live_navigation_query, page=page_number)) }}"
+  href="{{ url_for('director.analytics', **dict(live_navigation_query, page=page_number)) }}#decision-records"
   {{ 'aria-current=page' if page_number == report_page }}
 >Page {{ page_number }}</a>{% endfor %}
         {% if report_page < report_total_pages %}<a
   class="btn btn--outline"
-  href="{{ url_for('director.analytics', **dict(live_navigation_query, page=report_page + 1)) }}"
+  href="{{ url_for('director.analytics', **dict(live_navigation_query, page=report_page + 1)) }}#decision-records"
 >Next</a>{% endif %}
       </nav>
     {% endif %}

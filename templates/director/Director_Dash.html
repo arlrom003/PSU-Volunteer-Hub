@@ -1,5 +1,5 @@
 {% extends 'layouts/role_base.html' %}
-{% from 'partials/dashboard_ui.html' import period_control, performance_metrics, findings, chart, annual_plan_summary with context %}
+{% from 'partials/dashboard_ui.html' import performance_metrics, chart, annual_plan_summary with context %}
 {% set tour_page = true %}
 {% block title %}Director Dashboard · PSU Volunteer Hub{% endblock %}
 {% block header_title %}Director Console{% endblock %}
@@ -12,22 +12,35 @@
   </header>
   {{ annual_plan_summary(annual_plan, 'University annual-plan achievement') }}
 
-  {{ findings(attention_items, 'director.analytics', {'start_date': period.start, 'end_date': period.end}, director=true, scope='Attendance work across all dates; outcomes ' ~ period.label, landing=true) }}
-  {% if inactive_campuses %}
-    <details class="campus-follow-up-disclosure">
-      <summary>{{ inactive_campuses|length }} {{ 'campus has' if inactive_campuses|length == 1 else 'campuses have' }} no activities in this period</summary>
-      <p>{{ period.label }}. This describes activity records, not campus performance.</p>
-      <ul class="campus-follow-up">
-        {% for campus in inactive_campuses %}<li><strong>{{ campus.name }}</strong><a class="btn btn--outline" href="{{ url_for('director.analytics', campus=campus.id, campus_mode='include', start_date=period.start, end_date=period.end) }}">Review records<span class="sr-only"> for {{ campus.name }}</span></a></li>{% endfor %}
-      </ul>
-    </details>
-  {% endif %}
-
-  {{ period_control(period, 'director.director_dash') }}
-  <div data-tour-id="target-progress">{{ performance_metrics(performance, period, deltas) }}</div>
-  <div data-tour-id="campus-comparison">
+  <div data-tour-id="target-progress">{{ performance_metrics(performance, period, deltas, 'director.director_dash') }}</div>
+  <details class="analytics-disclosure" id="campus-participation">
+    <summary data-tour-id="campus-comparison"><span>Campus Participation</span><small>Compare registrations and verified attendance across campuses.</small></summary>
+    <div class="analytics-disclosure__content">
+      <section class="campus-coverage" aria-labelledby="campus-coverage-title">
+        <h2 id="campus-coverage-title">Campus activity coverage</h2>
+        <p class="scope-note">{{ period.label }}. Activity records in this period, not a campus performance rating.</p>
+        {% if campus_coverage.total %}
+          <p id="campus-coverage-summary"><strong>{{ campus_coverage.with_activity }} of {{ campus_coverage.total }} campuses</strong> have activity records; {{ campus_coverage.without_activity }} have no activity records.</p>
+          <div class="campus-coverage__bar" role="img" aria-labelledby="campus-coverage-summary">
+            <span class="campus-coverage__with" style="flex-grow: {{ campus_coverage.with_activity }}" aria-hidden="true"></span>
+            <span class="campus-coverage__without" style="flex-grow: {{ campus_coverage.without_activity }}" aria-hidden="true"></span>
+          </div>
+          <div class="campus-coverage__legend" aria-hidden="true"><span><i class="campus-coverage__with"></i>With activity records</span><span><i class="campus-coverage__without"></i>No activity records</span></div>
+          <ul class="campus-coverage__campuses">
+            {% for campus in campus_coverage.campuses %}
+              <li><a class="campus-coverage__tile{{ ' campus-coverage__tile--empty' if not campus.activities }}" href="{{ url_for('director.analytics', campus=campus.id, campus_mode='include', start_date=period.start, end_date=period.end) }}#decision-records">
+                <strong>{{ campus.name }}</strong>
+                <span class="campus-coverage__count">{{ campus.activities }} {{ 'activity' if campus.activities == 1 else 'activities' }}</span>
+                <span>{{ 'With activity records' if campus.activities else 'No activity records' }}</span>
+                <span class="campus-coverage__action">Review records<span class="sr-only"> for {{ campus.name }}</span></span>
+              </a></li>
+            {% endfor %}
+          </ul>
+        {% else %}<p class="empty-state">No campuses are configured. Activity totals can still include unassigned records.</p>{% endif %}
+      </section>
     {{ chart('Registrations and attendance by campus', 'Sign-ups compared with recorded present attendance. Incomplete attendance remains provisional.', period.label, 'director-campus-chart', {'labels': dashboard_data.campuses|map(attribute='label')|list, 'primary': dashboard_data.campuses|map(attribute='registrations')|list, 'secondary': dashboard_data.campuses|map(attribute='attended')|list}, 'grouped') }}
-  </div>
+    </div>
+  </details>
 
   <details class="secondary-workspace">
     <summary>Calendar, reports, and supporting evidence</summary>

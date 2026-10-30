@@ -83,12 +83,13 @@
   {{ findings(attention_items, 'coordinator.analytics', report_query) }}
   {{ performance_metrics(performance, period, deltas) }}
   {% if request.args.get('attention') %}<p class="scope-note">Showing: {{ attention_labels[request.args.get('attention')] }}. <a href="{{ url_for('coordinator.analytics', **dict(report_query, attention='')) }}">Show all activity records in this scope</a></p>{% endif %}
-  <details class="secondary-workspace"><summary>Category and participant breakdowns</summary>
+  <details class="analytics-disclosure" id="participation-breakdowns">
+    <summary><span>Participation Breakdowns</span><small>Activity categories, participant types, and monthly or weekly participation trends.</small></summary>
+    <div class="analytics-disclosure__content">
   <div class="analytics-grid">
     {{ chart('Participation by Category', 'Registrations grouped by activity category using the selected report dates and category.', 'Selected campus report scope', 'campusCategories', {'labels': dashboard_data.categories|map(attribute='label')|list, 'values': dashboard_data.categories|map(attribute='registrations')|list}) }}
     {{ chart('Participant Type', 'Registrations linked to PSU accounts compared with external community registrations without a PSU account.', 'Selected campus report scope', 'campusComposition', {'labels': ['PSU', 'External'], 'values': [report_summary.total_psu, report_summary.total_external]}, 'donut') }}
   </div>
-  </details>
   <section class="panel">
     {{ heading('Registrations and attendance', 'Activity-date periods comparing non-cancelled registrations with present attendance for the selected campus report filters.', 'Select a monthly or weekly view. Incomplete attendance remains provisional.') }}
     <label class="field field--inline">
@@ -116,7 +117,9 @@
     </details>
     <script id="campusEngagementData" type="application/json">{{ {'monthly': dashboard_data.monthly, 'weekly': dashboard_data.weekly}|tojson }}</script>
   </section>
-  <details class="secondary-workspace"><summary>Activity attendance rates</summary>
+    </div>
+  </details>
+  {% set activity_performance %}
   <section class="panel">
     <header class="panel__header">
       <div>
@@ -165,9 +168,9 @@
     </div>
   </section>
 
-  </details>
+  {% endset %}
   {% set supporting_evidence %}
-  <details class="analytics-disclosure">
+  <details class="analytics-disclosure" id="supporting-insights">
     <summary><span>Supporting Insights</span><small>Forecasts and recent attendance that use their own labelled campus scope.</small></summary>
     <div class="analytics-disclosure__content">
   <section class="analytics-grid">
@@ -245,10 +248,10 @@
   </details>
 
   {% endset %}
-  <header class="section-heading section-heading--compact">
-    <h2>Detailed Report</h2>
-    <p>Rows below match the current filters and the CSV/PDF exports.</p>
-  </header>
+  <details class="analytics-disclosure" id="detailed-report"{{ ' open' if request.args.get('event_id') or request.args.get('attention') }}>
+    <summary><span>Detailed Activity Report</span><small>Activity attendance rates and report rows matching the filters and exports.</small></summary>
+    <div class="analytics-disclosure__content">
+  {{ activity_performance }}
   <section class="panel" id="decision-records">
     <span id="filtered-report"></span>
     {{ heading('Filtered Activity Report', 'Activity-level counts matching the selected activity name, campus report dates, and category. PDF and CSV downloads contain these same rows.', 'Restricted to ' ~ campus_name ~ ' Campus') }}
@@ -302,6 +305,8 @@
     </div>
 
   </section>
+    </div>
+  </details>
   {{ supporting_evidence }}
 {% endblock %}
 {% block scripts %}

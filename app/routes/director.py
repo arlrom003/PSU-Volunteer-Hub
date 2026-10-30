@@ -6,6 +6,7 @@ Uses AnalyticsAggregator for all aggregation queries.
 """
 import csv
 import io
+from collections import Counter
 from calendar import Calendar
 from datetime import datetime
 from flask import Blueprint, render_template, Response, current_app, request, flash, redirect, url_for, abort
@@ -15,7 +16,7 @@ from app.recommendation.analytics import AnalyticsAggregator
 from app.models import db
 from app.models.event import Event, Campus, SdgGoal
 from app.models.user import User
-from app.dashboard import summarize_report, resolve_period, dashboard_evidence, consolidate_attention, annual_plan_summary
+from app.dashboard import summarize_report, resolve_period, dashboard_evidence, annual_plan_summary
 from app.reports import (
     build_events_report, render_csv, render_pdf, resolve_campus,
     ReportError, _build_meta, parse_date_range)
@@ -70,14 +71,15 @@ def director_dash():
         flash(str(exc), 'error')
         return redirect(url_for('director.director_dash'))
     evidence = dashboard_evidence({}, period, now)
-    pending, _ = build_events_report(attention='pending_attendance', now=now)
-    pending.sort(key=lambda row: (row['end_date'], row['event_id']))
-    evidence['attention_items'] = consolidate_attention(evidence['performance'], pending)
-    active = {row['campus_id'] for row in evidence['evidence_rows']}
+    counts = Counter(row['campus_id'] for row in evidence['evidence_rows'])
+    campuses = [{'id': campus.id, 'name': campus.name, 'activities': counts[campus.id]}
+                for campus in Campus.query.order_by(Campus.name).all()]
+    with_activity = sum(campus['activities'] > 0 for campus in campuses)
     evidence['annual_plan'] = annual_plan_summary(now.year)
     return render_template('director/Director_Dash.html', **evidence,
-                           inactive_campuses=[campus for campus in Campus.query.order_by(Campus.name).all()
-                                              if campus.id not in active],
+                           campus_coverage={'campuses': campuses, 'total': len(campuses),
+                                            'with_activity': with_activity,
+                                            'without_activity': len(campuses) - with_activity},
                            dashboard_data=summarize_report(evidence['evidence_rows']))
 
 

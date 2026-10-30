@@ -715,7 +715,7 @@ class TestPhaseOnePublicExperience:
         _login_as(client, coordinator_id)
         coordinator_body = client.get('/coordinator_dash').get_data(as_text=True)
         assert 'class="info-tip"' in coordinator_body
-        assert 'How these numbers are counted' in coordinator_body
+        assert 'How these numbers are counted' not in coordinator_body
 
     def test_director_analytics_renders_info_tips(self, client, app):
         director_id = _create_user(app, email='tips-director@test.com', role='director', campus_id=1)
@@ -775,8 +775,8 @@ class TestPhaseOnePublicExperience:
         _login_as(client, coordinator_id)
 
         body = client.get('/coordinator_dash').get_data(as_text=True)
-        assert body.index('Needs attention') < body.index('Participation outcomes')
-        assert body.index('Participation outcomes') < body.index('Manage activities')
+        assert body.index('Needs attention') < body.index('Performance overview')
+        assert body.index('Performance overview') < body.index('Manage activities')
         assert 'Review requests' not in body
         assert 'No activities need follow-up in this scope.' in body
 

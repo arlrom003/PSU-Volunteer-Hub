@@ -201,15 +201,19 @@ def test_landing_pages_explain_scope_and_next_action(app, client, decisions, rol
     response = client.get(path)
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert 'Attendance work across all dates' in body
-    assert 'Missing attendance' in body
-    assert 'awaiting completion confirmation' in body
     assert 'Performance period' in body
-    assert 'Participation outcomes' in body
-    assert body.index('Needs attention') < body.index('Participation outcomes')
+    assert 'Performance overview' in body
+    if role == 'coordinator':
+        assert 'Attendance work across all dates' in body
+        assert 'Missing attendance' in body
+        assert 'awaiting completion confirmation' in body
+        assert body.index('Needs attention') < body.index('Performance overview')
+    else:
+        assert 'Needs attention' not in body
+        assert 'Campus activity coverage' in body
     event_ids = re.findall(r'data-attention-event="(\d+)"', body)
     assert len(event_ids) == len(set(event_ids))
-    assert body.count('How these numbers are counted') == 1
+    assert 'How these numbers are counted' not in body
     if role == 'coordinator':
         assert re.search(r'<details[^>]+id="activity-workspace"\s*>', body)
         filtered = client.get(path + '?workspace=1&status=all').get_data(as_text=True)

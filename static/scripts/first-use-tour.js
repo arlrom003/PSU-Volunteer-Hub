@@ -24,7 +24,6 @@
     ],
     director: [
       ['annual-goals', 'Review annual-plan achievement', 'Open the large number for university targets and campus goal comparisons. Review goal proposals to approve campus targets. AOP and ASP retain their own counts; attendance by recorded sex is separate evidence.'],
-      ['summary', 'Start with university follow-up', 'Each activity appears once with all its review reasons. Attendance work comes first; additional activities and campus follow-up expand on demand.'],
       ['campus-comparison', 'Compare registrations and attendance', 'Compare campus sign-ups with recorded attendance for the selected period. Repeated participation counts per activity; historical source records have their own separate view.'],
       ['analytics', 'Filter the evidence', 'Analytics filters keep their scope through pagination and report downloads.'],
       ['recognition', 'Review recognition and demographics', 'Open internal analytics to review declared demographic responses and verified PSU participation rankings.'],

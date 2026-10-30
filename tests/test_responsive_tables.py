@@ -67,11 +67,11 @@ def test_activity_workspace_groups_secondary_and_destructive_actions():
     assert content.index('Publish announcement') < content.index('Remove activity')
 
 
-def test_director_leadership_attention_reflows_without_extra_tables():
+def test_director_campus_coverage_reflows_without_extra_tables():
     content = _template('director/Director_Dash.html')
     styles = (ROOT / 'static' / 'styles' / 'role-shell.css').read_text(encoding='utf-8')
 
-    assert 'findings(attention_items' in content
-    assert 'inactive_campuses' in content
-    assert '.attention-list > li' in styles
+    assert 'findings(attention_items' not in content
+    assert 'campus_coverage' in content
+    assert '.campus-coverage__campuses' in styles
     assert '@media (max-width: 640px)' in styles

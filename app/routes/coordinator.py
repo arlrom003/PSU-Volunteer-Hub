@@ -198,6 +198,13 @@ def coordinator_dash():
     pending, _ = build_events_report(campus_id=campus_id, attention='pending_attendance')
     pending.sort(key=lambda row: (row['end_date'], row['event_id']))
     evidence['attention_items'] = consolidate_attention(evidence['performance'], pending)
+    attention_total = len(evidence['attention_items'])
+    attention_pages = max(1, (attention_total + 4) // 5)
+    attention_page = min(max(request.args.get('attention_page', 1, type=int) or 1, 1), attention_pages)
+    evidence['attention_pagination'] = {
+        'page': attention_page, 'pages': attention_pages,
+        'start': (attention_page - 1) * 5, 'stop': min(attention_page * 5, attention_total),
+    }
     status = request.args.get('status', 'upcoming')
     category = request.args.get('category', '').strip()
     start_date = request.args.get('start_date', '').strip()

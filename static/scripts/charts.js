@@ -19,8 +19,15 @@
   const render = (node, type, data) => {
     if (!node) return;
     if (node.closest('details:not([open])')) return;
-    if (!window.Plotly || !data) {
+    if (!data || !window.Plotly) {
       node.innerHTML = '<p class="empty-state">Chart unavailable. Open the detailed values below.</p>';
+      node.setAttribute('aria-busy', 'false');
+      return;
+    }
+    if (!data.labels?.length || (type !== 'grouped' &&
+        !data.values?.some(Number) && !data.primary?.some(Number) && !data.secondary?.some(Number))) {
+      node.innerHTML = '<div class="empty-state">No chart data available.</div>';
+      node.setAttribute('aria-busy', 'false');
       return;
     }
     let traces = [];
@@ -34,14 +41,26 @@
         marker: { color: colors[0] }, name: data.name || 'Participation' }];
       layout = { ...layout, yaxis: { rangemode: 'tozero', gridcolor: '#e5e7eb' } };
     } else if (type === 'grouped') {
+      const maximum = Math.max(0, ...data.primary, ...data.secondary);
+      const counts = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
       traces = [
-        { type: 'bar', orientation: 'h', y: data.labels, x: data.primary, name: 'Registrations', marker: { color: colors[0] } },
-        { type: 'bar', orientation: 'h', y: data.labels, x: data.secondary, name: 'Verified attendance', marker: { color: colors[1], pattern: { shape: '/' } } },
-      ];
-      layout = { ...layout, barmode: 'group', height: Math.max(320, data.labels.length * 60 + 100),
-        margin: { t: 16, r: 16, b: 70, l: 90 },
-        xaxis: { rangemode: 'tozero', gridcolor: '#e5e7eb' },
-        yaxis: { type: 'category', autorange: 'reversed', automargin: true } };
+        { x: data.primary, name: 'Registrations', marker: { color: colors[0] } },
+        { x: data.secondary, name: 'Verified attendance', marker: { color: colors[1], pattern: { shape: '/' } } },
+      ].map((trace) => ({ ...trace, type: 'bar', orientation: 'h', y: data.labels,
+        text: trace.x.map((value) => counts.format(value)), textposition: 'outside', cliponaxis: false,
+        textfont: { color: '#111c2c', size: 13 },
+        hovertemplate: '%{y}<br>' + trace.name + ': %{x:,.0f}<extra></extra>' }));
+      layout = { ...layout, barmode: 'group', bargap: 0.3, bargroupgap: 0.12,
+        height: Math.max(340, data.labels.length * 76 + 140),
+        margin: { t: 16, r: 48, b: 110, l: 90 },
+        legend: { orientation: 'h', x: 0, y: -0.25, itemclick: false, itemdoubleclick: false },
+        xaxis: { title: { text: 'Participation count', standoff: 12 }, range: [0, Math.max(1, maximum * 1.2)],
+          tickformat: ',.0f', dtick: maximum <= 5 ? 1 : undefined,
+          separatethousands: true, gridcolor: '#e5e7eb', automargin: true },
+        yaxis: { type: 'category', autorange: 'reversed', automargin: true,
+          tickmode: 'array', tickvals: data.labels,
+          ticktext: data.labels.map((label) => String(label).match(/.{1,16}(?:\s|$)|\S{1,16}/g)
+            ?.map((part) => part.trim()).join('<br>') || label) } };
     } else {
       traces = [
         { type: 'scatter', mode: 'lines+markers', x: data.labels,
@@ -51,10 +70,6 @@
       ];
       layout = { ...layout, xaxis: { type: 'category', automargin: true },
         yaxis: { rangemode: 'tozero', gridcolor: '#e5e7eb' } };
-    }
-    if (!data.values?.some(Number) && !data.primary?.some(Number) && !data.secondary?.some(Number)) {
-      node.innerHTML = '<div class="empty-state">No chart data available.</div>';
-      return;
     }
     node.setAttribute('aria-busy', 'true');
     if (!node.classList.contains('js-plotly-plot')) node.innerHTML = '<p>Loading chart…</p>';

@@ -93,9 +93,10 @@
   </form>
 {%- endmacro %}
 
-{% macro performance_metrics(performance, period, deltas) -%}
+{% macro performance_metrics(performance, period, deltas, period_endpoint=none, period_query={}, workspace=false) -%}
   <section class="performance-overview" aria-label="Performance for {{ period.label }}">
-    <h2>Participation outcomes</h2>
+    <h2>{{ 'Performance overview' if period_endpoint else 'Participation outcomes' }}</h2>
+    {% if period_endpoint %}{{ period_control(period, period_endpoint, period_query, workspace) }}{% endif %}
     <div class="summary-strip">
       {{ metric('Activities', performance.activities, '', deltas.get('activities'), show_help=false) }}
       {{ metric('Registrations', performance.registrations, '', deltas.get('registrations'), show_help=false) }}
@@ -104,13 +105,6 @@
       {{ metric('Targets reached', (performance.targets_met ~ ' of ' ~ performance.targets_count) if performance.targets_count else 'Not available', '', show_help=false) }}
     </div>
     <p class="scope-note">{% if performance.rate is not none %}Attendance rate: {{ performance.rate_attended }} present / {{ performance.rate_registrations }} registrations in fully recorded, ended activities.{% else %}Attendance rate is unavailable until ended activities have complete records and registrations.{% endif %}</p>
-    <details class="metric-notes">
-      <summary>How these numbers are counted</summary>
-      <p>{{ period.label }}. Activities are counted by their start date. Registrations exclude cancellations. Verified attendance counts present records, including provisional results. Repeated participation counts per activity, not as unique people.</p>
-      <p>Attendance rates and target judgments use ended activities with every attendance record entered and present participants marked completed. {{ performance.pending|length }} ended activities in this scope still need attendance completed.</p>
-      {% if not performance.targets_count %}<p>Targets reached is unavailable when no eligible activity has a positive target or a sex filter shows only part of an activity.</p>{% endif %}
-      {% if period.comparison and deltas %}<p>Comparison: {{ period.comparison[0] }} to {{ period.comparison[1] }}, matching elapsed calendar days. Rate changes are percentage points (pp).</p>{% endif %}
-    </details>
   </section>
 {%- endmacro %}
 
@@ -129,7 +123,7 @@
   </li>
 {%- endmacro %}
 
-{% macro findings(items, endpoint, query={}, director=false, pending_cancellations=0, scope='Selected reporting period', landing=false) -%}
+{% macro findings(items, endpoint, query={}, director=false, pending_cancellations=0, scope='Selected reporting period', landing=false, pagination=none) -%}
   <section class="attention-overview" aria-labelledby="findings-title" data-tour-id="summary">
     <header class="attention-heading"><h2 id="findings-title">Needs attention</h2>{% if items %}<span>{{ items|length }} {{ 'activity' if items|length == 1 else 'activities' }}</span>{% endif %}</header>
     <p class="scope-note">{{ scope }}. The 75% attendance level is a review guide.</p>
@@ -137,8 +131,21 @@
       <div class="cancellation-queue" data-tour-id="cancellations"><strong>{{ pending_cancellations }} {{ 'request awaits' if pending_cancellations == 1 else 'requests await' }} review</strong><a class="btn btn--outline" href="{{ url_for('coordinator.cancellation_requests') }}">Review requests</a></div>
     {% endif %}
     {% if items %}
+      {% if pagination %}
+      <p class="attention-page-summary">Showing {{ pagination.start + 1 }}–{{ pagination.stop }} of {{ items|length }} {{ 'activity' if items|length == 1 else 'activities' }}</p>
+      <ul class="attention-list">{% for item in items[pagination.start:pagination.stop] %}{{ attention_row(item, endpoint, query, director, landing) }}{% endfor %}</ul>
+      {% if pagination.pages > 1 %}
+      {% set page_query = request.args.to_dict(flat=false) %}
+      <nav class="pagination" aria-label="Needs attention pages">
+        {% if pagination.page > 1 %}<a class="btn btn--outline" href="{{ url_for('coordinator.coordinator_dash', **dict(page_query, attention_page=pagination.page - 1)) }}#findings-title">Previous</a>{% endif %}
+        {% for number in range(1, pagination.pages + 1) %}<a class="btn {{ 'btn--primary' if number == pagination.page else 'btn--outline' }}" href="{{ url_for('coordinator.coordinator_dash', **dict(page_query, attention_page=number)) }}#findings-title"{{ ' aria-current=page' if number == pagination.page }}>Page {{ number }}</a>{% endfor %}
+        {% if pagination.page < pagination.pages %}<a class="btn btn--outline" href="{{ url_for('coordinator.coordinator_dash', **dict(page_query, attention_page=pagination.page + 1)) }}#findings-title">Next</a>{% endif %}
+      </nav>
+      {% endif %}
+      {% else %}
       <ul class="attention-list">{% for item in items[:3] %}{{ attention_row(item, endpoint, query, director, landing) }}{% endfor %}</ul>
       {% if items|length > 3 %}<details class="attention-more"><summary>Show {{ items|length - 3 }} more {{ 'activity' if items|length == 4 else 'activities' }}</summary><ul class="attention-list">{% for item in items[3:] %}{{ attention_row(item, endpoint, query, director, landing) }}{% endfor %}</ul></details>{% endif %}
+      {% endif %}
     {% else %}<p>No activities need follow-up in this scope.</p>{% endif %}
   </section>
 {%- endmacro %}
@@ -146,10 +153,22 @@
 {% macro chart(title, explanation, context, chart_id, data, kind='bar') -%}
   <section class="panel chart-panel">
     {{ heading(title, explanation, context) }}
+    {% if kind == 'grouped' %}<p class="scope-note">Registrations compared with recorded present attendance. Incomplete attendance remains provisional.</p>{% endif %}
     <div id="{{ chart_id }}" class="chart" data-chart="{{ kind }}" data-source="{{ chart_id }}-data" role="img" aria-label="{{ title }} chart"><p>Detailed values are available below. Charts require JavaScript.</p></div>
     <script id="{{ chart_id }}-data" type="application/json">{{ data|tojson }}</script>
-    <details class="chart-fallback"><summary>View {{ title|lower }} data</summary><ul class="chart-values">
-      {% for label in data.labels %}<li><span>{{ label }}</span><strong>{% if kind == 'grouped' %}{{ data.primary[loop.index0] }} registered / {{ data.secondary[loop.index0] }} attended{% else %}{{ data['values'][loop.index0] }}{% endif %}</strong></li>{% else %}<li>No records match this scope.</li>{% endfor %}
-    </ul></details>
+    <details class="chart-fallback"><summary>View {{ title|lower }} data</summary>
+      {% if kind == 'grouped' %}
+      <p class="table-scroll__hint" id="{{ chart_id }}-values-hint">Swipe horizontally to view remaining columns.</p>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="{{ title }} data" aria-describedby="{{ chart_id }}-values-hint">
+        <table class="data-table campus-chart-values">
+          <caption class="sr-only">{{ title }} · {{ context }}</caption>
+          <thead><tr><th scope="col">Campus</th><th scope="col">Registrations</th><th scope="col">Verified attendance</th></tr></thead>
+          <tbody>{% for label in data.labels %}<tr><th scope="row">{{ label }}</th><td>{{ data.primary[loop.index0] }}</td><td>{{ data.secondary[loop.index0] }}</td></tr>{% else %}<tr><td colspan="3">No records match this scope.</td></tr>{% endfor %}</tbody>
+        </table>
+      </div>
+      {% else %}<ul class="chart-values">
+        {% for label in data.labels %}<li><span>{{ label }}</span><strong>{{ data['values'][loop.index0] }}</strong></li>{% else %}<li>No records match this scope.</li>{% endfor %}
+      </ul>{% endif %}
+    </details>
   </section>
 {%- endmacro %}
