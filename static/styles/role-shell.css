@@ -980,6 +980,10 @@ body:has(.activity-page) .flash--success { background: var(--primary); }
 .goal-participation__basis, .goal-participation__breakdown { color: var(--on-surface-variant); font-size: .85rem; line-height: 1.5; }
 .goal-participation__breakdown dl > div { display: flex; justify-content: space-between; gap: 16px; padding-block: 5px; }
 .goal-participation__breakdown dd { margin: 0; font-weight: 700; }
+.goal-ranking-list { list-style: none; margin: 0; padding: 0; }
+.goal-overview__metrics:has(.goal-campus-ranking[open]) { align-items: start; }
+.goal-ranking-list > li { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px 0; border-top: 1px solid var(--outline-variant); overflow-wrap: anywhere; }
+.goal-ranking-list .btn { max-width: 100%; min-height: 44px; white-space: normal; }
 .goal-overview__actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .goal-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 14px 0; margin-top: 16px; border-block: 2px solid var(--gold); }
 .goal-preview strong { color: var(--primary-dark); }

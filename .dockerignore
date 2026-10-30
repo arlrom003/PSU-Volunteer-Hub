@@ -9,6 +9,8 @@
 !templates/**
 !static/
 !static/**
+!migrations/
+!migrations/*.sql
 **/__pycache__/
 **/*.pyc
 static/uploads/
