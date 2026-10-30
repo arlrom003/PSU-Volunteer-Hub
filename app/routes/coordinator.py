@@ -21,7 +21,7 @@ from app.models.notification import notify
 from app.utils.audit import log_activity
 from app.models.user import SystemSetting
 from app.recommendation.analytics import AnalyticsAggregator
-from app.dashboard import summarize_report, resolve_period, dashboard_evidence, consolidate_attention
+from app.dashboard import summarize_report, resolve_period, dashboard_evidence, consolidate_attention, annual_plan_summary
 from app.reports import (
     build_events_report, render_csv, render_pdf, ReportError, parse_date_range)
 from datetime import datetime, timedelta
@@ -231,6 +231,7 @@ def coordinator_dash():
 
     campus_name = current_user.campus.name if current_user.campus else 'Campus'
 
+    evidence['annual_plan'] = annual_plan_summary(datetime.now().year, campus_id)
     return render_template('coordinator/Coordinator_dash.html',
                             **evidence,
                             next_events=next_events,
@@ -844,8 +845,10 @@ def analytics():
     report_query = request.args.to_dict()
     report_query.update(start_date=start_date, end_date=end_date)
 
+    annual_plan = annual_plan_summary(request.args.get('year', datetime.now().year, type=int), campus_id)
     return render_template('coordinator/coordinator_analytics.html',
                             **evidence, report_query=report_query,
+                            annual_plan=annual_plan,
                             campus_name=campus_name,
                             forecast_data=forecast_data,
                             attendance_summary=attendance_summary,

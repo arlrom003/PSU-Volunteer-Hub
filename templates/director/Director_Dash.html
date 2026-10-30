@@ -1,5 +1,5 @@
 {% extends 'layouts/role_base.html' %}
-{% from 'partials/dashboard_ui.html' import period_control, performance_metrics, findings, chart %}
+{% from 'partials/dashboard_ui.html' import period_control, performance_metrics, findings, chart, annual_plan_summary with context %}
 {% set tour_page = true %}
 {% block title %}Director Dashboard · PSU Volunteer Hub{% endblock %}
 {% block header_title %}Director Console{% endblock %}
@@ -7,9 +7,10 @@
 {% block content %}
 <div class="dashboard-overview">
   <header class="page-heading">
-    <div><h1>University overview</h1><p>Complete attendance first, then review campus participation outcomes.</p></div>
-    <a class="btn btn--primary" data-tour-id="analytics" href="{{ url_for('director.analytics', start_date=period.start, end_date=period.end) }}">Open analytics</a>
+    <div><h1>University overview</h1><p>Track annual goals and follow up on campus delivery.</p></div>
+    <a class="btn btn--primary" data-tour-id="analytics" href="{{ url_for('director.analytics', start_date=period.start, end_date=period.end, sample=1 if annual_plan.sample else none, goal_year=annual_plan.year) }}">Open analytics</a>
   </header>
+  {{ annual_plan_summary(annual_plan, 'University annual-plan achievement') }}
 
   {{ findings(attention_items, 'director.analytics', {'start_date': period.start, 'end_date': period.end}, director=true, scope='Attendance work across all dates; outcomes ' ~ period.label, landing=true) }}
   {% if inactive_campuses %}

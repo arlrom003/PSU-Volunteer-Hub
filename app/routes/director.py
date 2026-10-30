@@ -15,7 +15,7 @@ from app.recommendation.analytics import AnalyticsAggregator
 from app.models import db
 from app.models.event import Event, Campus, SdgGoal
 from app.models.user import User
-from app.dashboard import summarize_report, resolve_period, dashboard_evidence, consolidate_attention
+from app.dashboard import summarize_report, resolve_period, dashboard_evidence, consolidate_attention, annual_plan_summary
 from app.reports import (
     build_events_report, render_csv, render_pdf, resolve_campus,
     ReportError, _build_meta, parse_date_range)
@@ -74,6 +74,7 @@ def director_dash():
     pending.sort(key=lambda row: (row['end_date'], row['event_id']))
     evidence['attention_items'] = consolidate_attention(evidence['performance'], pending)
     active = {row['campus_id'] for row in evidence['evidence_rows']}
+    evidence['annual_plan'] = annual_plan_summary(now.year)
     return render_template('director/Director_Dash.html', **evidence,
                            inactive_campuses=[campus for campus in Campus.query.order_by(Campus.name).all()
                                               if campus.id not in active],
@@ -208,8 +209,11 @@ def analytics():
         if value is not None:
             historical_query[key] = value
 
+    selected_year = request.args.get('year', datetime.now().year, type=int)
+    annual_plan = annual_plan_summary(selected_year)
     return render_template('director/Director_impact_anlaytics_dash.html',
                             **evidence,
+                            annual_plan=annual_plan,
                             analytics_view=analytics_view,
                             demographics=demographics,
                             historical_summary=historical_summary,

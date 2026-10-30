@@ -234,6 +234,12 @@ def _build_meta(title, scope, start_date, end_date, category,
     }
 
 
+def csv_safe(value):
+    if isinstance(value, str) and value[:1] in ('=', '+', '-', '@', '\t', '\r', '\n'):
+        return "'" + value
+    return value
+
+
 def render_csv(rows, summary, meta):
     import csv
     import io

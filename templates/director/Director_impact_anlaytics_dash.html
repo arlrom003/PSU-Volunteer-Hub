@@ -1,6 +1,6 @@
 {% extends 'layouts/role_base.html' %}
 {% from 'partials/info_tip.html' import info_tip %}
-{% from 'partials/dashboard_ui.html' import heading, metric, chart, period_control, performance_metrics, findings %}
+{% from 'partials/dashboard_ui.html' import heading, metric, chart, period_control, performance_metrics, findings, annual_plan_summary with context %}
 {% set active_page = "analytics" %}
 {% block title %}University Analytics · PSU Volunteer Hub{% endblock %}
 {% block header_title %}{{ 'Administration' if current_user.role == 'admin' else 'Director Console' }}{% endblock %}
@@ -17,6 +17,7 @@
       href="{{ url_for('director.activity_calendar') }}"
     >Activity calendar</a>
   </header>
+  {% if analytics_view == 'live' %}{{ annual_plan_summary(annual_plan, 'University annual-plan achievement') }}{% endif %}
   <nav class="analytics-view-switcher" aria-label="Analytics report view">
     <a
       class="btn {{ 'btn--primary' if analytics_view == 'live' else 'btn--outline' }}"

@@ -155,3 +155,18 @@ def summarize_report(rows):
         'sdgs': sorted(sdgs.items()),
         'activities': sorted(rows, key=lambda row: row['registrations'], reverse=True)[:10],
     }
+
+
+def annual_plan_summary(year=None, campus_id=None):
+    from app.annual_goals import dashboard_context, summary
+    from flask import has_request_context
+    try:
+        return dashboard_context(year, campus_id) if has_request_context() else summary(year, campus_id)
+    except ValueError:
+        from flask import abort
+        abort(400, description='Choose a valid annual reporting year.')
+
+
+def annual_plan_comparison(year=None):
+    from app.annual_goals import comparisons
+    return comparisons(year)

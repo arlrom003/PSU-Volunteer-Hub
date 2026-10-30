@@ -1,0 +1,13 @@
+{% extends 'layouts/role_base.html' %}
+{% block title %}Goal proposal review · PSU Volunteer Hub{% endblock %}
+{% block header_title %}Annual goals{% endblock %}
+{% block header_subtitle %}Proposal review{% endblock %}
+{% block content %}
+<header class="page-heading"><div><h1>{{ proposal.payload.name }}</h1><p>{{ proposal.campus.name if proposal.campus else 'University' }} · {{ proposal.status|capitalize }}</p></div><a class="btn btn--outline" href="{{ url_for('goals.workspace') }}">Back to workspace</a></header>
+{% if error %}<p role="alert" class="goal-form-error">{{ error }}</p>{% endif %}
+<dl class="goal-definition">{% for key,value in proposal.payload.items() %}<div><dt>{{ key|replace('_',' ')|capitalize }}</dt><dd>{{ value or 'Not supplied' }}</dd></div>{% endfor %}</dl>
+{% if proposal.review_note %}<p>Review note: {{ proposal.review_note }}</p>{% endif %}
+{% if director and proposal.status == 'submitted' %}<form method="post" class="goal-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="field goal-form__wide">Review explanation (required when returning)<textarea class="input" name="note" rows="3" maxlength="4000"></textarea></label><div class="panel__actions"><button class="btn btn--primary" name="action" value="approve">Approve campus goal</button><button class="btn btn--outline" name="action" value="return">Return for revision</button></div></form>{% endif %}
+<details><summary>Proposal history</summary><ol>{% for item in proposal.history %}<li>{{ item.action|capitalize }} · {{ item.at }} · Account {{ item.actor }}{% if item.note %}: {{ item.note }}{% endif %}</li>{% endfor %}</ol></details>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='scripts/annual-goals.js') }}"></script>{% endblock %}

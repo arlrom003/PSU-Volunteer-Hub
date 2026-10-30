@@ -14,6 +14,7 @@
       ['help', 'Get help when needed', 'The Help page explains registration, attendance, recommendations, and account access.'],
     ],
     coordinator: [
+      ['annual-goals', 'Track campus goals', 'The large number shows approved annual targets achieved. Open it for AOP and ASP evidence, or use Campus goal proposals to submit a target for director approval. Sample previews are labelled separately.'],
       ['summary', 'Start with campus follow-up', 'Review cancellation requests and complete attendance for ended activities. This unresolved work covers all dates; performance below uses its own reporting period.'],
       ['create-activity', 'Create an activity', 'Add the activity details, target, cancellation deadline, and applicable SDGs before publishing.'],
       ['activity-workspace', 'Manage activities', 'Expand Manage activities to filter records, record attendance, publish updates, and upload milestones. This workspace stays closed until you need it.'],
@@ -22,6 +23,7 @@
       ['analytics', 'Use analytics and reports', 'Filter campus results, review attendance outcomes, then download the matching CSV or PDF report.'],
     ],
     director: [
+      ['annual-goals', 'Review annual-plan achievement', 'Open the large number for university targets and campus goal comparisons. Review goal proposals to approve campus targets. AOP and ASP retain their own counts; attendance by recorded sex is separate evidence.'],
       ['summary', 'Start with university follow-up', 'Each activity appears once with all its review reasons. Attendance work comes first; additional activities and campus follow-up expand on demand.'],
       ['campus-comparison', 'Compare registrations and attendance', 'Compare campus sign-ups with recorded attendance for the selected period. Repeated participation counts per activity; historical source records have their own separate view.'],
       ['analytics', 'Filter the evidence', 'Analytics filters keep their scope through pagination and report downloads.'],

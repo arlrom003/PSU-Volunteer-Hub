@@ -1,6 +1,6 @@
 {% extends 'layouts/role_base.html' %}
 {% from 'partials/info_tip.html' import info_tip %}
-{% from 'partials/dashboard_ui.html' import period_control, performance_metrics, findings %}
+{% from 'partials/dashboard_ui.html' import period_control, performance_metrics, findings, annual_plan_summary with context %}
 {% set tour_page = true %}
 {% block title %}Coordinator Dashboard · PSU Volunteer Hub{% endblock %}
 {% block header_title %}Coordinator Console{% endblock %}
@@ -10,7 +10,7 @@
   <header class="page-heading">
     <div>
       <h1>{{ campus_name }} campus overview</h1>
-      <p>Resolve requests, complete attendance, and prepare your next activities.</p>
+      <p>Track campus goals, complete participation records, and prepare activities.</p>
     </div>
     <div class="panel__actions">
       <a
@@ -21,10 +21,11 @@
       <a
         class="btn btn--outline"
         data-tour-id="analytics"
-        href="{{ url_for('coordinator.analytics', start_date=period.start, end_date=period.end) }}"
+        href="{{ url_for('coordinator.analytics', start_date=period.start, end_date=period.end, sample=1 if annual_plan.sample else none, goal_year=annual_plan.year) }}"
       >Analytics and reports</a>
     </div>
   </header>
+  {{ annual_plan_summary(annual_plan, campus_name ~ ' annual-plan achievement') }}
   <div class="coordinator-briefing">
   <div data-tour-id="attendance">
     {{ findings(attention_items, 'coordinator.analytics', {'start_date': period.start, 'end_date': period.end}, pending_cancellations=pending_cancellations, scope='Attendance work across all dates; outcomes ' ~ period.label, landing=true) }}

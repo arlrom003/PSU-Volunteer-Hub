@@ -138,6 +138,22 @@ def import_historical_activities(csv_path, dry_run):
         f'{updated} updated, {unchanged} unchanged.')
 
 
+@click.command('import-annual-plans')
+@click.argument('csv_path', type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option('--dry-run', is_flag=True, help='Validate and report changes without committing them.')
+@with_appcontext
+def import_annual_plans(csv_path, dry_run):
+    """Idempotently import approved AOP/ASP definitions and results."""
+    from app.annual_import import import_file
+    from app.reports import ReportError
+    try:
+        created, unchanged = import_file(csv_path, dry_run)
+    except (ReportError, SQLAlchemyError) as exc:
+        db.session.rollback()
+        raise click.ClickException(str(exc) if isinstance(exc, ReportError) else 'Import failed; no records committed.') from None
+    click.echo(f'{"Dry run: " if dry_run else ""}{created} created, {unchanged} unchanged.')
+
+
 @click.command('seed-demo-analytics')
 @with_appcontext
 def seed_demo_analytics():
@@ -271,5 +287,24 @@ def register_commands(app):
 
     app.cli.add_command(init_production)
     app.cli.add_command(import_historical_activities)
+    app.cli.add_command(import_annual_plans)
     app.cli.add_command(seed_demo_analytics)
     app.cli.add_command(reset_and_seed_demo)
+    app.cli.add_command(migrate_annual_goals_command)
+
+
+@click.command('migrate-annual-goals')
+@click.option('--database', required=True, help='Exact configured database name to upgrade.')
+@click.option('--dry-run', is_flag=True, help='Inspect and list missing schema changes without applying them.')
+@with_appcontext
+def migrate_annual_goals_command(database, dry_run):
+    """Upgrade existing annual-plan tables without deleting their records."""
+    from app.annual_migration import migrate_annual_goals
+    try:
+        statements = migrate_annual_goals(db.engine, database, dry_run)
+    except (ValueError, SQLAlchemyError) as exc:
+        raise click.ClickException(str(exc) if isinstance(exc, ValueError) else
+                                   'Migration failed. MySQL DDL may be partially applied; inspect and rerun this command.') from None
+    for statement in statements:
+        click.echo(statement)
+    click.echo(f'{"Dry run: " if dry_run else "Applied: "}{len(statements)} schema changes.')

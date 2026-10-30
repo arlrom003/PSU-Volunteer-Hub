@@ -1,0 +1,21 @@
+{% extends 'layouts/role_base.html' %}
+{% block title %}Propose annual goal · PSU Volunteer Hub{% endblock %}
+{% block header_title %}Annual goals{% endblock %}
+{% block header_subtitle %}{{ 'University target' if director else 'Campus proposal' }}{% endblock %}
+{% block content %}
+<header class="page-heading"><div><h1>{{ 'University goal' if director else 'Campus goal proposal' }}</h1><p>{{ 'Publish an approved university target with its source reference.' if director else 'Your campus is assigned from your account. A director must approve this target.' }}</p></div><a class="btn btn--outline" href="{{ url_for('goals.workspace') }}">Back to workspace</a></header>
+{% if error %}<p class="goal-form-error" role="alert" tabindex="0">{{ error }}</p>{% endif %}
+{% if proposal and proposal.review_note %}<p>Director review: {{ proposal.review_note }}</p>{% endif %}
+<form method="post" class="goal-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label class="field">Year<input class="input" name="year" type="number" min="1900" max="2100" value="{{ values.get('year', '') }}" required></label>
+  <label class="field">Plan<select class="select" name="plan_type">{% for kind in ['AOP','ASP'] %}<option{{ ' selected' if values.get('plan_type') == kind }}>{{ kind }}</option>{% endfor %}</select></label>
+  {% for name,label,limit in [('program','Program',255),('code','Indicator code',80),('name','Indicator name',500),('unit','Measurement unit',80),('responsible_office','Responsible office',255),('source_document','Supporting document or approval reference',255)] %}<label class="field">{{ label }}<input class="input" name="{{ name }}" maxlength="{{ limit }}" value="{{ values.get(name, '') }}" required></label>{% endfor %}
+  <label class="field goal-form__wide">Indicator definition<textarea class="input" name="definition" maxlength="4000" rows="4" required>{{ values.get('definition','') }}</textarea></label>
+  <label class="field">Target<input class="input" name="target_value" type="number" min="0" max="1000000000000" step="any" value="{{ values.get('target_value','') }}" required></label>
+  <label class="field">Comparison rule<select class="select" name="comparison_rule">{% for key,item in rules.items() %}<option value="{{ key }}"{{ ' selected' if values.get('comparison_rule') == key }}>{{ item[0] }}</option>{% endfor %}</select></label>
+  <label class="field">Counting basis<select class="select" name="evidence_basis">{% for key,label in bases.items() %}<option value="{{ key }}"{{ ' selected' if values.get('evidence_basis') == key }}>{{ label }}</option>{% endfor %}</select></label>
+  <label class="field">Approved deadline (optional)<input class="input" name="deadline" type="date" value="{{ values.get('deadline','') }}"></label>
+  <div class="goal-form__wide panel__actions"><button class="btn btn--outline" name="action" value="save">Save draft</button>{% if director %}<button class="btn btn--primary" name="action" value="publish">Publish university target</button>{% else %}<button class="btn btn--primary" name="action" value="submit">Submit for director review</button>{% endif %}</div>
+</form>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='scripts/annual-goals.js') }}"></script>{% endblock %}

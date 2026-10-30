@@ -1,6 +1,6 @@
 {% extends 'layouts/role_base.html' %}
 {% from 'partials/info_tip.html' import info_tip %}
-{% from 'partials/dashboard_ui.html' import heading, metric, chart, period_control, performance_metrics, findings %}
+{% from 'partials/dashboard_ui.html' import heading, metric, chart, period_control, performance_metrics, findings, annual_plan_summary with context %}
 {% set active_page = "analytics" %}
 {% block title %}Campus Analytics · PSU Volunteer Hub{% endblock %}
 {% block header_title %}Coordinator Console{% endblock %}
@@ -17,6 +17,7 @@
       href="{{ url_for('coordinator.attendance') }}"
     >Manage attendance</a>
   </header>
+  {{ annual_plan_summary(annual_plan, campus_name ~ ' annual-plan achievement') }}
   {{ period_control(period, 'coordinator.analytics', report_query) }}
   <section
     class="panel dashboard-filters"

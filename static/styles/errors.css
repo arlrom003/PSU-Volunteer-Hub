@@ -1,0 +1,32 @@
+/* PSU blue identifies the error; gold marks the recovery content without carrying text. */
+.error-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  background: var(--surface, #f9f9ff);
+  color: var(--on-surface, #111c2c);
+  font-family: Inter, system-ui, sans-serif;
+}
+.error-brand, .error-footer { padding: 24px clamp(20px, 5vw, 72px); }
+.error-skip { position: absolute; top: 8px; left: 20px; transform: translateY(-200%); padding: 12px; background: var(--primary, #00408b); color: white; font-weight: 700; z-index: 1; }
+.error-skip:focus { transform: none; }
+.error-brand a { display: inline-flex; align-items: center; gap: 12px; min-height: 48px; color: var(--primary, #00408b); text-decoration: none; font-weight: 700; }
+.error-brand img { display: block; flex: 0 0 auto; }
+.error-content { width: 100%; max-width: 960px; box-sizing: border-box; flex: 1; align-content: center; margin: 0 auto; padding: 40px clamp(20px, 5vw, 72px) 64px; }
+.error-code { margin: 0 0 24px; color: var(--primary-dark, #001a41); font-size: clamp(5.5rem, 16vw, 10rem); line-height: 1; letter-spacing: -.055em; font-weight: 800; font-variant-numeric: tabular-nums; }
+.error-code::after { content: ''; display: block; width: 72px; height: 6px; margin-top: 20px; background: var(--gold, #f6bf22); }
+.error-content h1 { margin: 0 0 16px; max-width: 24ch; font-size: clamp(1.65rem, 4vw, 2.5rem); line-height: 1.2; color: var(--primary-dark, #001a41); text-wrap: balance; overflow-wrap: anywhere; }
+.error-message { max-width: 48ch; margin: 0; color: var(--on-surface-variant, #424752); font-size: 1.05rem; line-height: 1.65; }
+.error-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 28px; }
+.error-actions .btn { min-height: 44px; min-width: 120px; box-sizing: border-box; white-space: normal; }
+.error-page a:focus-visible { outline: 3px solid var(--primary, #00408b); outline-offset: 4px; }
+.error-brand a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.error-footer { color: var(--on-surface-variant, #424752); font-size: .875rem; }
+@media (max-width: 480px) {
+  .error-brand, .error-footer { padding: 20px; }
+  .error-content { padding: 24px 20px 40px; }
+  .error-actions { align-items: stretch; }
+  .error-actions .btn { flex: 1 1 130px; }
+}

@@ -16,6 +16,8 @@ from app.models.notification import Notification
 from app.models.audit import AuditLog
 from app.models.policy import (TermsRevision, TermsAcceptance, PrivacyRevision,
                                PrivacyAcknowledgement, ParticipationAgreementRevision)
+from app.models.annual_plan import (AnnualPlan, AnnualIndicator, AnnualTarget, AnnualResult,
+                                  AnnualActivityMapping, AnnualGoalProposal)
 from config import config
 from app.services.session_idle import check_inactivity, end_session, session_status
 
@@ -35,6 +37,11 @@ def create_app(config_name=None):
     # App configuration
     app.config.from_object(config[config_name])
     app.config['APP_ENV'] = config_name
+    if config_name in ('development', 'default'):
+        app.config['DEV_ERROR_DEBUGGER'] = os.environ.get('DEV_ERROR_DEBUGGER', 'false').lower() == 'true'
+        app.config['PROPAGATE_EXCEPTIONS'] = app.config['DEV_ERROR_DEBUGGER']
+    elif config_name == 'production':
+        app.config.update(DEV_ERROR_DEBUGGER=False, PROPAGATE_EXCEPTIONS=False)
     timeout = app.config['SESSION_IDLE_TIMEOUT_SECONDS']
     warning = app.config['SESSION_IDLE_WARNING_SECONDS']
     if not (isinstance(timeout, int) and isinstance(warning, int)
@@ -59,10 +66,12 @@ def create_app(config_name=None):
     # Initialize extensions
     db.init_app(app)
     CSRFProtect(app)
+    from app.errors import register_error_handlers
+    register_error_handlers(app)
 
     @app.after_request
     def set_security_headers(response):
-        if current_user.is_authenticated or request.endpoint in (
+        if response.status_code >= 400 or session.get('_user_id') or request.endpoint in (
                 'auth.session_activity', 'auth.login', 'auth.forgot_password', 'auth.reset_password'):
             response.headers['Cache-Control'] = 'no-store'
         if config_name == 'production':
@@ -87,6 +96,8 @@ def create_app(config_name=None):
     @app.before_request
     def require_current_terms():
         """Keep authenticated users on the active Terms revision."""
+        if request.endpoint == 'static' or getattr(request.routing_exception, 'code', None) == 404:
+            return None
         if current_user.is_authenticated and session.get('auth_version') != current_user.auth_version:
             return end_session('Your session expired because your password was changed. Sign in again.')
         if current_user.is_authenticated:
@@ -123,6 +134,8 @@ def create_app(config_name=None):
     app.register_blueprint(coordinator_bp)
     from app.routes.director import director_bp
     app.register_blueprint(director_bp)
+    from app.routes.goals import goals_bp
+    app.register_blueprint(goals_bp)
     from app.routes.admin import admin_bp
     app.register_blueprint(admin_bp)
     from app.routes.events import events_bp
