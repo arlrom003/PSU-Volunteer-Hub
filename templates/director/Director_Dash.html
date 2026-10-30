@@ -1,24 +1,52 @@
 {% extends 'layouts/role_base.html' %}
-{% from 'partials/dashboard_ui.html' import performance_metrics, chart, annual_plan_summary with context %}
+{% from 'partials/info_tip.html' import info_tip %}
+{% from 'partials/dashboard_ui.html' import performance_metrics, heading, annual_plan_summary with context %}
 {% set tour_page = true %}
 {% block title %}Director Dashboard · PSU Volunteer Hub{% endblock %}
 {% block header_title %}Director Console{% endblock %}
 {% block header_subtitle %}University-Wide Oversight{% endblock %}
 {% block content %}
-<div class="dashboard-overview">
+<div class="dashboard-overview director-overview">
   <header class="page-heading">
     <div><h1>University Overview</h1><p>Track annual goals and follow up on campus delivery.</p></div>
-    <a class="btn btn--primary" data-tour-id="analytics" href="{{ url_for('director.analytics', start_date=period.start, end_date=period.end, sample=1 if annual_plan.sample else none, goal_year=annual_plan.year) }}">Open Analytics</a>
+    <a class="btn btn--primary" data-tour-id="analytics" href="{{ url_for('director.analytics', **live_navigation_query) }}">Open Analytics</a>
   </header>
   {{ annual_plan_summary(annual_plan, 'University Annual-Plan Achievement') }}
 
-  <div data-tour-id="target-progress">{{ performance_metrics(performance, period, deltas, 'director.director_dash') }}</div>
-  <details class="analytics-disclosure" id="campus-participation">
-    <summary data-tour-id="campus-comparison"><span>Campus Participation</span><small>Compare registrations and verified attendance across campuses.</small></summary>
-    <div class="analytics-disclosure__content">
+  <div class="director-briefing">
+    <section class="recognition-overview" id="recognition" aria-labelledby="recognition-title" data-tour-id="recognition">
+      <header class="panel__header"><div>
+        <div class="heading-with-tip"><h2 id="recognition-title">Outstanding Recognition</h2>{{ info_tip('Outstanding Recognition', 'Informational calendar-year Top 5 rankings based on verified participation. They support recognition decisions and do not create awards automatically.') }}</div>
+        <p class="scope-note">University-wide calendar-year rankings; activity filters do not change the award cohort.</p>
+      </div></header>
+      <form class="filter-row" method="get" action="{{ url_for('director.director_dash') }}#recognition">
+        {% for key, values in request.args.to_dict(flat=false).items() if key not in ['award_year', 'page'] %}{% for value in values %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}{% endfor %}
+        <label class="field">Award Year<select name="award_year">{% for year in award_years %}<option value="{{ year }}"{{ ' selected' if award_year == year }}>{{ year }}</option>{% endfor %}</select></label><button class="btn btn--outline" type="submit">View</button>
+      </form>
+      <h3>Outstanding Volunteers</h3><ol class="rank-list">{% for row in leaderboards.volunteers %}<li><span>#{{ row.rank }} {{ row.name }} · {{ row.campus }}</span><strong>{{ row.attendance }} Present / {{ row.completed }} Completed</strong></li>{% else %}<li>No verified volunteer participation for {{ award_year }}.</li>{% endfor %}</ol>
+      <h3>Outstanding Campuses</h3><ol class="rank-list">{% for row in leaderboards.campuses %}<li><span>#{{ row.rank }} {{ row.name }}</span><strong>{{ row.rate }}% · {{ row.attendance }} Present</strong></li>{% else %}<li>No verified campus participation for {{ award_year }}.</li>{% endfor %}</ol>
+    </section>
+    <section class="dashboard-calendar" id="activity-calendar" aria-labelledby="activity-calendar-title" data-tour-id="calendar">
+      <h2 id="activity-calendar-title">Activity Calendar</h2>
+      {% include 'partials/campus_calendar.html' %}
+      <a class="btn btn--outline" href="{{ url_for('director.activity_calendar', year=calendar_year, month=calendar_number) }}">Open Full Calendar</a>
+    </section>
+  </div>
+  <div data-tour-id="target-progress">{{ performance_metrics(performance, period, deltas, 'director.director_dash', live_query) }}</div>
+  <section id="cross-campus-comparison" aria-labelledby="comparison-title" data-tour-id="campus-comparison">
+    <span id="campus-participation"></span>
+    <h2 id="comparison-title">Cross-Campus Comparison</h2>
+    <p>Choose a report scope, review campus activity coverage, and open Analytics for participation charts and attendance outcomes.</p>
+    {% include 'partials/university_report_filters.html' %}
+    <p class="scope-note">{{ live_scope|join(' · ') }}</p>
+    <div class="panel__actions">
+      <a class="btn btn--primary" href="{{ url_for('director.analytics', **live_navigation_query) }}#campusComparison">View Campus Comparison</a>
+      <a class="btn btn--outline" href="{{ url_for('director.analytics', **live_navigation_query) }}#campus-outcomes">View Campus Outcomes</a>
+      <a class="btn btn--outline" href="{{ url_for('director.analytics', **live_navigation_query) }}#decision-records">View Activity Report</a>
+    </div>
       <section class="campus-coverage" aria-labelledby="campus-coverage-title">
-        <h2 id="campus-coverage-title">Campus Activity Coverage</h2>
-        <p class="scope-note">{{ period.label }}. Activity records in this period, not a campus performance rating.</p>
+        <h3 id="campus-coverage-title">Campus Activity Coverage</h3>
+        <p class="scope-note">{{ period.label }}. Coverage reflects activity records in the selected report scope, not a campus performance rating.</p>
         {% if campus_coverage.total %}
           <p id="campus-coverage-summary"><strong>{{ campus_coverage.with_activity }} of {{ campus_coverage.total }} campuses</strong> have activity records; {{ campus_coverage.without_activity }} have no activity records.</p>
           <div class="campus-coverage__bar" role="img" aria-labelledby="campus-coverage-summary">
@@ -28,7 +56,7 @@
           <div class="campus-coverage__legend" aria-hidden="true"><span><i class="campus-coverage__with"></i>With Activity Records</span><span><i class="campus-coverage__without"></i>No Activity Records</span></div>
           <ul class="campus-coverage__campuses">
             {% for campus in campus_coverage.campuses %}
-              <li><a class="campus-coverage__tile{{ ' campus-coverage__tile--empty' if not campus.activities }}" href="{{ url_for('director.analytics', campus=campus.id, campus_mode='include', start_date=period.start, end_date=period.end) }}#decision-records">
+              <li><a class="campus-coverage__tile{{ ' campus-coverage__tile--empty' if not campus.activities }}" href="{{ url_for('director.analytics', **dict(live_navigation_query, campus=[campus.id], campus_mode=['include'])) }}#decision-records">
                 <strong>{{ campus.name }}</strong>
                 <span class="campus-coverage__count">{{ campus.activities }} {{ 'Activity' if campus.activities == 1 else 'Activities' }}</span>
                 <span>{{ 'With Activity Records' if campus.activities else 'No Activity Records' }}</span>
@@ -36,24 +64,17 @@
               </a></li>
             {% endfor %}
           </ul>
-        {% else %}<p class="empty-state">No campuses are configured. Activity totals can still include unassigned records.</p>{% endif %}
+        {% elif campus_error %}<p class="empty-state">Choose valid campuses above to review coverage.</p>{% elif campuses %}<p class="empty-state">No campuses are included in this report scope. Unassigned activity records remain in totals.</p>{% else %}<p class="empty-state">No campuses are configured. Activity totals can still include unassigned records.</p>{% endif %}
       </section>
-    {{ chart('Registrations and Attendance by Campus', 'Sign-ups compared with recorded present attendance. Incomplete attendance remains provisional.', period.label, 'director-campus-chart', {'labels': dashboard_data.campuses|map(attribute='label')|list, 'primary': dashboard_data.campuses|map(attribute='registrations')|list, 'secondary': dashboard_data.campuses|map(attribute='attended')|list}, 'grouped') }}
-    </div>
-  </details>
+  </section>
 
   <details class="secondary-workspace">
-    <summary>Calendar, Reports, and Supporting Evidence</summary>
+    <summary>Reports and Supporting Evidence</summary>
     <nav class="overview-links" aria-label="Director Evidence Workspaces">
-      <a class="btn btn--outline" data-tour-id="calendar" href="{{ url_for('director.activity_calendar') }}">Activity Calendar</a>
-      <a class="btn btn--outline" data-tour-id="reports" href="{{ url_for('director.analytics', start_date=period.start, end_date=period.end) }}#filters">Reports and Exports</a>
-      <a class="btn btn--outline" data-tour-id="recognition" href="{{ url_for('director.analytics') }}#supporting-insights">Recognition and Demographics</a>
+      <a class="btn btn--outline" href="#cross-campus-comparison">Reports and Exports</a>
+      <a class="btn btn--outline" href="{{ url_for('director.analytics', **live_navigation_query) }}#supporting-insights">Demographics and Supporting Insights</a>
       <a class="btn btn--outline" href="{{ url_for('director.analytics', view='historical') }}">Historical Source Records</a>
     </nav>
   </details>
 </div>
-{% endblock %}
-{% block scripts %}
-  <script src="{{ url_for('static', filename='scripts/plotly-5.24.1.min.js') }}"></script>
-  <script src="{{ url_for('static', filename='scripts/charts.js') }}"></script>
 {% endblock %}

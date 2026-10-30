@@ -186,6 +186,8 @@ def test_drilldowns_exports_and_html_agree(app, client, decisions, role, path, e
     monkeypatch.setattr(f'app.routes.{role}.render_pdf', pdf)
     assert client.get(export.replace('.csv', '.pdf') + query).data == b'%PDF-decision-evidence'
     body = response.get_data(as_text=True)
+    if role == 'director':
+        body = client.get('/director_dash' + query).get_data(as_text=True)
     export_links = re.findall(r'href="([^"]+\.csv[^\"]*)"', body)
     assert export_links and 'attention=low_attendance' in unescape(export_links[0])
 

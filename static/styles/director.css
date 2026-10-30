@@ -39,12 +39,21 @@
 @media (max-width: 900px) { .leadership-attention__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .leadership-attention__grid { grid-template-columns: 1fr; } .leadership-attention__item p { min-height: 0; } }
 
-.calendar-nav { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
-.calendar-grid { border: 1px solid var(--outline-variant); border-radius: var(--radius); display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); overflow: hidden; }
-.calendar-weekdays { display: contents; }
-.calendar-weekdays span { background: var(--surface-container-low); color: var(--on-surface-variant); font-size: .8rem; font-weight: 700; padding: .55rem .25rem; text-align: center; }
-.calendar-day { border-right: 1px solid var(--outline-variant); border-top: 1px solid var(--outline-variant); min-height: 7rem; padding: .45rem; }
-.calendar-day--empty { background: var(--surface-low); }
-.calendar-entry { background: var(--primary-light); color: var(--primary); display: block; font-size: .76rem; font-weight: 700; margin-top: .3rem; padding: .3rem; text-decoration: none; }
-.calendar-entry small { display: block; font-weight: 400; margin-top: .2rem; }
-@media (max-width: 760px) { .calendar-day { min-height: 5rem; padding: .25rem; } .calendar-entry { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .calendar-entry small { display: none; } }
+.director-briefing { display: grid; gap: 32px; margin: 0 0 32px; }
+.director-briefing > * { min-width: 0; height: 100%; }
+.director-briefing h2 { margin: 0; font-size: 1.15rem; line-height: 1.4; }
+.director-briefing .dashboard-calendar > h2 { min-height: 44px; display: flex; align-items: center; }
+.recognition-overview .scope-note { margin-bottom: 0; font-size: .875rem; }
+.recognition-overview .filter-row { align-items: end; margin-bottom: 20px; }
+.recognition-overview .rank-list li { flex-wrap: wrap; gap: 8px 16px; }
+.recognition-overview .rank-list span { min-width: 0; overflow-wrap: anywhere; }
+.recognition-overview .rank-list strong { font-variant-numeric: tabular-nums; }
+#cross-campus-comparison, #recognition, #campus-outcomes, #campusComparison, #filters, #campus-participation { scroll-margin-top: 6rem; }
+#cross-campus-comparison { margin-top: 32px; }
+#cross-campus-comparison > .campus-coverage { margin-top: 32px; }
+@media (min-width: 1200px) {
+  .director-briefing { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
+}
+@media (max-width: 640px) {
+  .recognition-overview .filter-row > .field, .recognition-overview .filter-row > .btn { width: 100%; }
+}

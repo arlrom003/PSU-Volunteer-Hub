@@ -51,12 +51,15 @@ def test_targeted_report_requests_reveal_the_report(app, client, path, query):
     assert 'open' not in page.one('details', id='participation-breakdowns').attrs
 
 
-def test_director_dashboard_groups_campus_chart_and_matches_its_table(app, client):
+def test_director_dashboard_links_to_the_analytics_campus_chart(app, client):
     _login_as(client, _create_user(app, role='director', campus_id=1))
     page = parse_html(client.get('/director_dash?period=all').get_data(as_text=True))
-    group = page.one('details', id='campus-participation')
-    assert 'open' not in group.attrs
-    data = json.loads(group.one('script', id='director-campus-chart-data').text)
+    comparison = page.one('section', id='cross-campus-comparison')
+    assert comparison.one('section', id='filters')
+    assert not page.all('div', **{'data-chart': 'grouped'})
+    page = parse_html(client.get('/analytics?period=all').get_data(as_text=True))
+    group = page.one('details', id='participation-breakdowns')
+    data = json.loads(group.one('script', id='campusComparison-data').text)
     table = group.one('table', **{'class': 'data-table campus-chart-values'})
     rows = table.one('tbody').all('tr')
     assert [row.one('th', scope='row').text for row in rows] == data['labels']

@@ -2,6 +2,32 @@
 
 PSU Volunteer Hub is a centralized volunteer-management platform for Pangasinan State University. It supports public opportunity discovery, volunteer registration, campus-scoped coordination, attendance, descriptive analytics, reports, policy acknowledgements, and administrative governance.
 
+## Continuation Status: 31 October 2026
+
+Start with [HANDOFF.md](HANDOFF.md#current-handoff-31-october-2026) for the goal,
+current state, decisions and reasons, ruled-out options, next step, relevant
+files, verification commands, and the exact skills/rules used.
+
+Both GitHub `main` branches were verified at `03d1fc1`. The original local branch
+is still at `e2e9e6e` with mixed uncommitted edits. The latest Director layout is
+integrated into the running local workspace, verified in the user's browser,
+and **not committed or pushed**. See [DIRECTOR_DASHBOARD_QA.md](DIRECTOR_DASHBOARD_QA.md).
+Do not confuse a local worktree, a GitHub push, and a deployed Railway revision.
+
+Current local Director behavior: Worst Performing Campus uses the lowest exact
+annual goal-achievement ratio; recognition and the complete university calendar
+share the briefing row. Filters/exports and coverage live in Cross-Campus
+Comparison. The campus chart and attendance-outcomes table remain in Analytics;
+Admin analytics retains its controls. Preview buttons are removed from both
+dashboards. Coordinator keeps five-item square pagination, its 2% PSU gold hero,
+full calendar, and permanently visible Manage Activities.
+
+Latest layout evidence is 200 targeted Python cases, four chart tests, and 219
+browser assertions, plus 22 integration cases in the original workspace. This
+documentation update runs no new application tests and makes no deployment or
+database change. Native zoom, screen-reader, physical-device, and hosted checks
+remain separate. Older results below are dated snapshots.
+
 ## What it does
 
 - Public landing page, featured activities, opportunity search with multi-campus include/exclude filters, PSU volunteer joining, help guide, and 2020–2025 historical activity directory.
@@ -48,12 +74,14 @@ flask run --port 5000
 
 For production, set a non-default `SECRET_KEY` and a MySQL `DATABASE_URL`. Do not commit either value.
 
-## Production startup (not deployed)
+## Production Startup
 
-For the planned synthetic Railway thesis demo, see `RAILWAY_DEMO_DEPLOYMENT.md`.
-Local Docker build/startup/persistence checks passed; see `DOCKER_DEMO_QA.md`.
-Actual cloud deployment remains unverified; do not upload local database exports
-or existing user files. Confirm trial credit/volume limits first.
+For the existing Railway thesis demo and deployment boundaries, see
+[RAILWAY_DEMO_DEPLOYMENT.md](RAILWAY_DEMO_DEPLOYMENT.md). Earlier local Docker
+checks are recorded in [DOCKER_DEMO_QA.md](DOCKER_DEMO_QA.md). Main/demo recovery
+flows were user-confirmed on 29 October; deployment of later GitHub revisions
+has not been independently verified here. Do not upload private database exports
+or existing user files, and do not initialize an existing database from this guide.
 
 Use `wsgi:app`, which explicitly selects production configuration, rather than
 `app:app` or the development server. For Linux/WSL hosting with the installed
@@ -80,10 +108,12 @@ not a complete HTTPS deployment; keep the WSGI port private behind the proxy.
   Local development defaults and explicit `create_app('testing')` keep their
   existing initialization behavior. Demo commands remain explicit operator actions,
   not production startup steps.
-- Initial provisioning, tracked SQL exposure/history cleanup, full recovery
-  backups, HTTPS, persistent uploads and real SMTP verification remain release gates.
+- For any new deployment, verify provisioning, HTTPS, persistent uploads, email
+  delivery and recovery backups, and address historical SQL exposure. The current
+  Railway apps use Brevo HTTPS email delivery; their status is recorded in
+  `PASSWORD_RECOVERY_QA.md` and `RAILWAY_DEMO_DEPLOYMENT.md`.
 
-### Explicit fresh-database provisioning (not yet deployed)
+### Explicit fresh-database provisioning
 
 After a database administrator creates a **new, empty** target database, configure
 `DATABASE_URL` and `SECRET_KEY` securely for that target. Do not point this command
@@ -113,8 +143,9 @@ new disposable database, including first-Admin login and second-run refusal.
 See `PRODUCTION_INIT_QA.md`; this is not hosted-deployment approval.
 The subsequent full regression run passed all 352 tests in one run; the user
 approved publishing this verified feature, tests and documentation.
-Policies, SMTP, uploads, backups and HTTPS still need
-operator configuration/verification before opening the system to users.
+Policies, uploads, backups, HTTPS and email delivery require operator
+configuration/verification for each target. Current Railway email verification
+is recorded below; encrypted off-site recovery remains unfinished.
 
 ## Demo accounts
 
@@ -312,6 +343,14 @@ focused local checks, not a new full-suite or deployment claim.
 - Keep `PRIVATE_UPLOAD_FOLDER` outside the web root. New milestone uploads are private and are downloaded only through role-checked routes.
 
 ## Password recovery email setup
+
+Status, 29 October 2026: Brevo HTTPS delivery is configured on the main and demo
+Railway apps. The user confirmed receiving the email, signing in with the
+temporary password, choosing a permanent password and signing in with it on
+both apps. Agent checks verified provider access and database connectivity;
+the agent did not inspect the user's inbox or enter their credentials. See
+`PASSWORD_RECOVERY_QA.md` for test evidence and remaining limits. The setup
+instructions below remain applicable to new environments.
 
 Forgot password emails a random temporary password to the active account's
 registered email. Enter it on the sign-in page to choose a new password before

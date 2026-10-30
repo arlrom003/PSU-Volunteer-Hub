@@ -32,64 +32,16 @@
   </nav>
   {% if analytics_view == 'live' %}
   {{ period_control(period, 'director.analytics', live_navigation_query) }}
-  <section
-    class="panel dashboard-filters"
-    aria-label="Live Analytics Filters"
-    id="filters"
-  >
-    {{ heading('Filters and Reports', 'Primary filters scope the live summary, comparison charts, trend, and activity report. More filters adds campus, demographic, SDG, and affiliation scope.', 'Select a scope, then download the same live activity data as CSV or PDF.') }}
-    {% set advanced_filters_active = selected_campuses or selected_sex or selected_sdg_id or selected_department %}
-    <form class="filter-row analytics-filter-form" method="get" id="analytics-filters">
-      <input type="hidden" name="view" value="live">
-      {% if request.args.get('event_id') %}<input type="hidden" name="event_id" value="{{ request.args.get('event_id') }}">{% endif %}
-      <div class="analytics-filter-primary">
-        <label class="field">Activity Name
-          <input type="search" name="activity_name" autocomplete="off"
-            value="{{ request.args.get('activity_name', '') }}"
-            aria-describedby="activity-name-help">
-          <small id="activity-name-help">Matches any part of the activity title, ignoring case.</small>
-        </label>
-        <label class="field">Start Date<input type="date" name="start_date" value="{{ period.start }}"></label>
-        <label class="field">End Date<input type="date" name="end_date" value="{{ period.end }}"></label>
-        <label class="field">Category<select name="category"><option value="">All Categories</option>{% for category in categories %}<option value="{{ category }}" {{ 'selected' if request.args.get("category") == category }}>{{ category }}</option>{% endfor %}</select></label>
-      </div>
-      <details class="analytics-advanced-filters"{{ ' open' if advanced_filters_active or campus_error }}>
-        <summary>More Filters{{ ' (Active)' if advanced_filters_active }}</summary>
-        <div class="analytics-advanced-filters__content">
-          <details class="campus-filter analytics-campus-filter"{{ ' open' if campus_error }}>
-            <summary>Live Campuses: {% if selected_campuses %}{{ selected_campuses|length }} {{ 'Excluded' if campus_mode == 'exclude' else 'Selected' }}{% else %}All{% endif %}</summary>
-            <label class="field campus-filter__mode">Selection Mode<select name="campus_mode" aria-describedby="live-campus-help"><option value="include"{{ ' selected' if campus_mode == 'include' }}>Show Only Selected Campuses</option><option value="exclude"{{ ' selected' if campus_mode == 'exclude' }}>Exclude Selected Campuses</option></select></label>
-            <p id="live-campus-help">No selection shows all campuses. Excluding campuses keeps unassigned activities. Historical reports and affiliation evidence use the separate historical campus selection below.</p>
-            {% if campus_error %}<p class="campus-filter__error" role="alert">{{ campus_error }}</p>{% endif %}
-            <fieldset class="campus-filter__choices" aria-describedby="live-campus-help"><legend>Choose Live Campuses</legend><div class="campus-filter__grid">{% for campus in campuses %}<label class="campus-filter__choice"><input type="checkbox" name="campus" value="{{ campus.id }}"{{ ' checked' if campus.id in selected_campuses }}><span>{{ campus.name }}</span></label>{% else %}<p>No campuses are available. Reports can still include unassigned activities.</p>{% endfor %}</div></fieldset>
-          </details>
-          {% if current_user.role == 'director' %}
-            <label class="field">Sex<select name="sex"><option value="">All Statuses</option><option value="female" {{ 'selected' if selected_sex == 'female' }}>Female</option><option value="male" {{ 'selected' if selected_sex == 'male' }}>Male</option><option value="prefer_not_to_say" {{ 'selected' if selected_sex == 'prefer_not_to_say' }}>Prefer Not to Say</option><option value="unrecorded" {{ 'selected' if selected_sex == 'unrecorded' }}>Not Recorded</option></select></label>
-            <label class="field">SDG<select name="sdg_id"><option value="">All SDGs</option>{% for sdg in sdgs %}<option value="{{ sdg.id }}" {{ 'selected' if selected_sdg_id == sdg.id }}>SDG {{ sdg.number }}: {{ sdg.name }}</option>{% endfor %}</select></label>
-          {% endif %}
-          <label class="field">Participant Affiliation<select name="department"><option value="">All Affiliations</option>{% for department in departments %}<option value="{{ department }}" {{ 'selected' if selected_department == department }}>{{ department }}</option>{% endfor %}</select><small>Options follow the separate historical/home-campus selection below, not live campuses.</small></label>
-        </div>
-      </details>
-      {% for key in ['start_year', 'end_year', 'activity_type', 'award_year', 'campus_id'] %}
-        <input type="hidden" name="{{ key }}" value="{{ request.args.get(key, '') }}">
-      {% endfor %}
-      <div class="analytics-filter-actions">
-        <label class="field">Attention<select name="attention"><option value="">All Activity Records</option>{% for key, label in attention_labels.items() %}<option value="{{ key }}"{{ ' selected' if request.args.get('attention') == key }}>{{ label }}</option>{% endfor %}</select></label>
-        <button class="btn btn--primary" type="submit">Apply Filters</button>
-        <a class="btn btn--ghost" href="{{ url_for('director.analytics') }}">Clear</a>
-      </div>
-    </form>
-    <div class="dashboard-export-actions">
-      <a
-        class="btn btn--outline"
-        href="{{ url_for('director.export_university_pdf', **live_query) }}"
-      >Export PDF</a>
-      <a
-        class="btn btn--outline"
-        href="{{ url_for('director.export_university_csv', **live_query) }}"
-      >Export CSV</a>
-    </div>
-  </section>
+  {% if current_user.role == 'admin' %}
+    {% include 'partials/university_report_filters.html' %}
+  {% else %}
+    <section class="panel report-scope" id="filters" aria-labelledby="report-scope-title">
+      <h2 id="report-scope-title">Selected Report Scope</h2>
+      <p>{{ live_scope|join(' · ') }}</p>
+      {% if campus_error %}<p role="alert">{{ campus_error }}</p>{% endif %}
+      <a class="btn btn--outline" href="{{ url_for('director.director_dash', **live_query) }}#cross-campus-comparison">Change Filters</a>
+    </section>
+  {% endif %}
   {{ findings(attention_items, 'director.analytics', live_query, director=true) }}
   {{ performance_metrics(performance, period, deltas) }}
   {% if request.args.get('attention') %}<p class="scope-note">Showing: {{ attention_labels[request.args.get('attention')] }}. <a href="{{ url_for('director.analytics', **dict(live_query, attention='')) }}">Show All Activity Records in This Scope</a></p>{% endif %}
@@ -130,14 +82,15 @@
   </details>
   {% set supporting_evidence %}
   <details class="analytics-disclosure" id="supporting-insights">
-    <summary><span>Supporting Insights</span><small>Recognition, demographics, profile context, and supplementary measures.</small></summary>
+    <summary><span>Supporting Insights</span><small>Demographics, profile context, and supplementary measures.</small></summary>
     <div class="analytics-disclosure__content">
   {% if current_user.role == 'director' %}
     <section
-      class="analytics-grid"
+      class="demographic-evidence"
       id="recognition"
-      aria-label="Director Recognition and Demographics"
+      aria-label="Director Demographics"
     >
+      <p><a class="btn btn--outline" href="{{ url_for('director.director_dash', **live_query) }}#recognition">View Outstanding Recognition on the Dashboard</a></p>
       <article class="panel">
         <header class="panel__header">
           <div>
@@ -155,20 +108,6 @@
           aria-label="Sex-Disaggregated Attendance Table"
           aria-describedby="sex-participation-scroll-hint"
         ><table class="data-table data-table--report data-table--report-compact"><thead><tr><th scope="col">Sex</th><th scope="col">Actual Participants</th></tr></thead><tbody>{% for row in sex_participation %}<tr><td>{{ 'Not Recorded' if row.sex == 'Not recorded' else row.sex }}</td><td>{{ row.actual_participants }}</td></tr>{% else %}<tr><td colspan="2"><div class="empty-state">No verified participation matches this scope.</div></td></tr>{% endfor %}</tbody></table></div>
-      </article>
-      <article class="panel">
-        <header class="panel__header">
-          <div>
-            <div class="heading-with-tip">
-              <h2>Outstanding Recognition</h2>
-              {{ info_tip('Outstanding Recognition', 'Informational calendar-year Top 5 rankings based on verified participation. They support recognition decisions and do not create awards automatically.') }}
-            </div>
-            <small>University-wide calendar-year rankings; activity filters do not change the award cohort.</small>
-          </div>
-        </header>
-        <form class="filter-row" method="get">{% for key, values in live_navigation_query.items() if key not in ['award_year'] %}{% for value in values %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}{% endfor %}<label class="field">Award Year<select name="award_year">{% for year in award_years %}<option value="{{ year }}" {{ 'selected' if award_year == year }}>{{ year }}</option>{% endfor %}</select></label><button class="btn btn--outline" type="submit">View</button></form>
-        <h3>Outstanding Volunteers</h3><ol class="rank-list">{% for row in leaderboards.volunteers %}<li><span>#{{ row.rank }} {{ row.name }} · {{ row.campus }}</span><strong>{{ row.attendance }} Present / {{ row.completed }} Completed</strong></li>{% else %}<li>No verified volunteer participation for {{ award_year }}.</li>{% endfor %}</ol>
-        <h3>Outstanding Campuses</h3><ol class="rank-list">{% for row in leaderboards.campuses %}<li><span>#{{ row.rank }} {{ row.name }}</span><strong>{{ row.rate }}% · {{ row.attendance }} Present</strong></li>{% else %}<li>No verified campus participation for {{ award_year }}.</li>{% endfor %}</ol>
       </article>
     </section>
   {% endif %}
@@ -199,7 +138,7 @@
   <details class="analytics-disclosure" id="detailed-report"{{ ' open' if request.args.get('page') or request.args.get('event_id') or request.args.get('attention') }}>
     <summary><span>Detailed Activity Report</span><small>Campus outcomes, activity attendance rates, and paginated activity rows.</small></summary>
     <div class="analytics-disclosure__content">
-  <section class="panel">
+  <section class="panel" id="campus-outcomes">
     {{ heading('Campus Attendance Outcomes', 'Rates use only ended activities with fully recorded attendance. Counts include every selected activity.', 'Selected live report scope') }}
     <p class="table-scroll__hint" id="campus-comparison-scroll-hint">Swipe horizontally to view remaining columns.</p>
     <div

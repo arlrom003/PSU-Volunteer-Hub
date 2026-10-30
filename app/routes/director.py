@@ -16,6 +16,7 @@ from app.recommendation.analytics import AnalyticsAggregator
 from app.models import db
 from app.models.event import Event, Campus, SdgGoal
 from app.models.user import User
+from sqlalchemy.orm import selectinload
 from app.dashboard import summarize_report, resolve_period, dashboard_evidence, annual_plan_summary
 from app.reports import (
     build_events_report, render_csv, render_pdf, resolve_campus,
@@ -60,6 +61,94 @@ def _historical_filters():
     }
 
 
+def _live_report_context(period):
+    campuses = Campus.query.order_by(db.func.lower(Campus.name), Campus.name, Campus.id).all()
+    selected, mode, allowed, error = _live_campuses(campuses)
+    sex = request.args.get('sex', '').strip().lower()
+    sex = sex if sex in ('male', 'female', 'prefer_not_to_say', 'unrecorded') else None
+    sdgs = SdgGoal.query.order_by(SdgGoal.number).all()
+    sdg_id = request.args.get('sdg_id', type=int)
+    sdg = next((goal for goal in sdgs if goal.id == sdg_id), None)
+    sdg_id = sdg.id if sdg else None
+    try:
+        evidence = dashboard_evidence(dict(campus_ids=allowed,
+            category=request.args.get('category', '').strip(), sex=sex, sdg_id=sdg_id,
+            activity_name=request.args.get('activity_name', ''),
+            attention=request.args.get('attention', ''), event_id=request.args.get('event_id')), period)
+    except ReportError:
+        abort(400, description='Choose valid report dates and attention filters. Clear the sex filter to review participant targets.')
+    query = {key: values for key, values in request.args.to_dict(flat=False).items()
+             if key not in {'view', 'page', 'start_year', 'end_year', 'activity_type'}}
+    query.update(start_date=[period['start']], end_date=[period['end']])
+    if not error:
+        query.update(campus=[str(campus_id) for campus_id in selected], campus_mode=[mode])
+    departments = db.session.query(User.college_affiliation).filter(User.college_affiliation.isnot(None))
+    home_campus = request.args.get('campus_id', type=int)
+    if home_campus:
+        departments = departments.filter(User.campus_id == home_campus)
+    scope = [period['label']]
+    names = [campus.name for campus in campuses if campus.id in selected]
+    scope.append('Invalid Campus Selection' if error else
+                 (('All campuses except: ' if mode == 'exclude' else 'Selected campuses: ') +
+                  ', '.join(names) if names else 'All campuses'))
+    for key, label in [('activity_name', 'Activity'), ('category', 'Category')]:
+        if request.args.get(key):
+            scope.append(f"{label}: {request.args[key]}")
+    if sex:
+        scope.append('Sex: ' + {'female': 'Female', 'male': 'Male',
+            'prefer_not_to_say': 'Prefer Not to Say', 'unrecorded': 'Not Recorded'}[sex])
+    if sdg_id:
+        scope.append(f'SDG: {sdg.number}, {sdg.name}')
+    if request.args.get('attention'):
+        scope.append('Attention: ' + evidence['attention_labels'][request.args['attention']])
+    return dict(evidence, campuses=campuses, selected_campuses=selected, campus_mode=mode,
+        campus_error=error, live_query=query, live_navigation_query=dict(query, view=['live']),
+        live_scope=scope, live_summary=evidence['evidence_summary'],
+        dashboard_data=summarize_report(evidence['evidence_rows']),
+        categories=[row[0] for row in db.session.query(Event.category).filter(
+            Event.category.isnot(None)).distinct().order_by(Event.category).all()],
+        sdgs=sdgs, selected_sex=sex, selected_sdg_id=sdg_id,
+        departments=[row[0] for row in departments.distinct().order_by(User.college_affiliation).all()],
+        selected_department=request.args.get('department', '').strip())
+
+
+def _director_calendar(year, month, campus_id=None, category='', dashboard=False):
+    now = datetime.now()
+    year, month = year or now.year, month or now.month
+    if not 1 <= year <= 9999 or not 1 <= month <= 12:
+        year, month = now.year, now.month
+    query = Event.query.options(selectinload(Event.campus), selectinload(Event.sdgs)).filter(
+        db.extract('year', Event.date) == year, db.extract('month', Event.date) == month)
+    if campus_id:
+        query = query.filter(Event.campus_id == campus_id)
+    if category:
+        query = query.filter(Event.category == category)
+    by_day, links = {}, {}
+    for event in query.order_by(Event.date, Event.id).all():
+        by_day.setdefault(event.date.day, []).append(event)
+        links[event.id] = url_for('director.analytics', event_id=event.id,
+            start_date=event.date.date().isoformat(), end_date=event.date.date().isoformat(),
+            _anchor='decision-records')
+    previous = ((year - 1, 12) if month == 1 else (year, month - 1)) if (year, month) != (1, 1) else None
+    following = ((year + 1, 1) if month == 12 else (year, month + 1)) if (year, month) != (9999, 12) else None
+
+    def month_url(value):
+        if value is None:
+            return None
+        if dashboard:
+            args = request.args.to_dict(flat=False)
+            args.update(calendar_year=value[0], calendar_month=value[1], _anchor='activity-calendar')
+            return url_for('director.director_dash', **args)
+        return url_for('director.activity_calendar', year=value[0], month=value[1],
+                       campus_id=campus_id, category=category)
+
+    return dict(calendar_weeks=Calendar(firstweekday=0).monthdayscalendar(year, month),
+        calendar_events=by_day, calendar_month=datetime(year, month, 1).strftime('%B %Y'),
+        calendar_year=year, calendar_number=month, previous_calendar_url=month_url(previous),
+        next_calendar_url=month_url(following), calendar_event_links=links,
+        calendar_scope='University Activities', calendar_show_campus=True)
+
+
 @director_bp.route('/director_dash')
 @login_required
 @roles_required('director', 'admin')
@@ -70,48 +159,43 @@ def director_dash():
     except ReportError as exc:
         flash(str(exc), 'error')
         return redirect(url_for('director.director_dash'))
-    evidence = dashboard_evidence({}, period, now)
+    evidence = _live_report_context(period)
     counts = Counter(row['campus_id'] for row in evidence['evidence_rows'])
     campuses = [{'id': campus.id, 'name': campus.name, 'activities': counts[campus.id]}
-                for campus in Campus.query.order_by(Campus.name).all()]
+                for campus in evidence['campuses'] if not evidence['campus_error'] and
+                (not evidence['selected_campuses'] or
+                 ((campus.id in evidence['selected_campuses']) == (evidence['campus_mode'] == 'include')))]
     with_activity = sum(campus['activities'] > 0 for campus in campuses)
     evidence['annual_plan'] = annual_plan_summary(now.year)
+    award_years = sorted({row[0] for row in db.session.query(
+        db.extract('year', Event.date)).distinct().all()}, reverse=True) or [now.year]
+    award_year = request.args.get('award_year', type=int)
+    if award_year not in award_years:
+        award_year = award_years[0]
+    state = {key: request.args.getlist(key) for key in
+             ('goal_year', 'sample', 'award_year', 'calendar_year', 'calendar_month') if key in request.args}
     return render_template('director/Director_Dash.html', **evidence,
+                           **_director_calendar(request.args.get('calendar_year', type=int),
+                                                request.args.get('calendar_month', type=int), dashboard=True),
+                           award_years=award_years, award_year=award_year,
+                           leaderboards=AnalyticsAggregator.award_leaderboards(award_year),
+                           dashboard_state=state,
                            campus_coverage={'campuses': campuses, 'total': len(campuses),
                                             'with_activity': with_activity,
-                                            'without_activity': len(campuses) - with_activity},
-                           dashboard_data=summarize_report(evidence['evidence_rows']))
+                                            'without_activity': len(campuses) - with_activity}), (400 if evidence['campus_error'] else 200)
 
 
 @director_bp.route('/director/calendar')
 @login_required
 @roles_required('director', 'admin')
 def activity_calendar():
-    now = datetime.now()
-    year = request.args.get('year', now.year, type=int) or now.year
-    month = request.args.get('month', now.month, type=int) or now.month
     campus_id = resolve_campus(request.args.get('campus_id'))
     category = request.args.get('category', '').strip()
-    if not 1 <= month <= 12:
-        year, month = now.year, now.month
-    query = Event.query.filter(db.extract('year', Event.date) == year,
-                               db.extract('month', Event.date) == month)
-    if campus_id:
-        query = query.filter(Event.campus_id == campus_id)
-    if category:
-        query = query.filter(Event.category == category)
-    by_day = {}
-    for event in query.order_by(Event.date).all():
-        by_day.setdefault(event.date.day, []).append(event)
-    previous = (year - 1, 12) if month == 1 else (year, month - 1)
-    following = (year + 1, 1) if month == 12 else (year, month + 1)
     categories = [row[0] for row in db.session.query(Event.category).filter(
         Event.category.isnot(None)).distinct().order_by(Event.category).all()]
     return render_template('director/activity_calendar.html',
-                           calendar_weeks=Calendar(firstweekday=0).monthdayscalendar(year, month),
-                           calendar_events=by_day, calendar_month=datetime(year, month, 1).strftime('%B %Y'),
-                           calendar_year=year, calendar_number=month,
-                           previous_calendar=previous, next_calendar=following,
+                           **_director_calendar(request.args.get('year', type=int),
+                                                request.args.get('month', type=int), campus_id, category),
                            campuses=Campus.query.order_by(Campus.name).all(), categories=categories,
                            selected_campus=campus_id, selected_category=category)
 
@@ -138,46 +222,22 @@ def analytics():
     historical_summary = AnalyticsAggregator.historical_summary(**filters)
     historical_campus_data = AnalyticsAggregator.historical_campus_stats(**filters)
     from app.models.event import HistoricalActivity
-    campuses = Campus.query.order_by(db.func.lower(Campus.name), Campus.name, Campus.id).all()
     activity_types = [row[0] for row in db.session.query(
         HistoricalActivity.activity_type).filter(
             HistoricalActivity.activity_type.isnot(None)).distinct().all()]
 
-    # Live event-based report (date / campus / category filters)
-    selected_campuses, campus_mode, live_campus_ids, campus_error = _live_campuses(campuses)
+    context = _live_report_context(period)
+    live_rows, live_summary = context['evidence_rows'], context['live_summary']
     live_start = period['start']
     live_end = period['end']
     live_category = request.args.get('category', '').strip()
-    live_sex = request.args.get('sex', '').strip().lower()
-    live_sex = live_sex if live_sex in (
-        'male', 'female', 'prefer_not_to_say', 'unrecorded') else None
-    live_sdg_id = request.args.get('sdg_id', type=int)
-    if live_sdg_id and db.session.get(SdgGoal, live_sdg_id) is None:
-        live_sdg_id = None
-    try:
-        evidence = dashboard_evidence(dict(campus_ids=live_campus_ids,
-            category=live_category, sex=live_sex, sdg_id=live_sdg_id,
-            activity_name=request.args.get('activity_name', ''),
-            attention=request.args.get('attention', ''), event_id=request.args.get('event_id')), period)
-        live_rows, live_summary = evidence['evidence_rows'], evidence['evidence_summary']
-    except ReportError:
-        abort(400, description='Choose valid report dates and attention filters. Clear the sex filter to review participant targets.')
-    dashboard_data = summarize_report(live_rows)
+    live_sex = context['selected_sex']
     report_page = max(request.args.get('page', 1, type=int), 1)
     report_page_size = 10
     report_total_pages = max(1, (len(live_rows) + report_page_size - 1) // report_page_size)
     report_page = min(report_page, report_total_pages)
     report_rows = live_rows[(report_page - 1) * report_page_size:report_page * report_page_size]
-    categories = [row[0] for row in db.session.query(Event.category).filter(
-        Event.category.isnot(None)).distinct().order_by(Event.category).all()]
-    department = request.args.get('department', '').strip()
-    selected_campus_id = request.args.get('campus_id', type=int)
-    department_query = db.session.query(User.college_affiliation).filter(
-        User.college_affiliation.isnot(None))
-    if selected_campus_id:
-        department_query = department_query.filter(User.campus_id == selected_campus_id)
-    departments = [row[0] for row in department_query.distinct().order_by(
-        User.college_affiliation).all()]
+    department = context['selected_department']
 
     # Supplementary profile evidence retains its independently labelled scope.
     live_campus_filter = resolve_campus(request.args.get('campus_id'))
@@ -190,22 +250,6 @@ def analytics():
         category=live_category, sex=live_sex,
         activity_name=request.args.get('activity_name', ''),
         event_ids=[row['event_id'] for row in live_rows])
-    award_years = sorted({event.date.year for event in Event.query.with_entities(Event.date).all()}, reverse=True)
-    award_year = request.args.get('award_year', type=int)
-    if award_year not in award_years:
-        award_year = award_years[0] if award_years else datetime.now().year
-    leaderboards = (AnalyticsAggregator.award_leaderboards(award_year)
-                    if current_user.role == 'director' else None)
-
-    query = request.args.to_dict(flat=False)
-    live_query = {
-        key: values for key, values in query.items()
-        if key not in {'view', 'page', 'start_year', 'end_year', 'activity_type'}
-    }
-    live_query.update(start_date=[live_start], end_date=[live_end])
-    if not campus_error:
-        live_query['campus'] = [str(campus_id) for campus_id in selected_campuses]
-        live_query['campus_mode'] = [campus_mode]
     historical_query = {'view': 'historical'}
     for key, value in filters.items():
         if value is not None:
@@ -214,32 +258,21 @@ def analytics():
     selected_year = request.args.get('year', datetime.now().year, type=int)
     annual_plan = annual_plan_summary(selected_year)
     return render_template('director/Director_impact_anlaytics_dash.html',
-                            **evidence,
+                            **context,
                             annual_plan=annual_plan,
                             analytics_view=analytics_view,
                             demographics=demographics,
                             historical_summary=historical_summary,
                             historical_campus_data=historical_campus_data,
-                            campuses=campuses, activity_types=activity_types,
-                            selected_campuses=selected_campuses, campus_mode=campus_mode,
-                            campus_error=campus_error,
-                            live_query=live_query,
-                            live_navigation_query=dict(live_query, view=['live']),
+                            activity_types=activity_types,
                             historical_query=historical_query,
-                            categories=categories,
-                            sdgs=SdgGoal.query.order_by(SdgGoal.number).all(),
-                            selected_sex=live_sex, selected_sdg_id=live_sdg_id,
                             selected_filters=filters,
-                            live_rows=report_rows, live_summary=live_summary,
-                            dashboard_data=dashboard_data,
+                            live_rows=report_rows,
                             report_page=report_page, report_total_pages=report_total_pages,
                             top_skills=top_skills,
                             top_interests=top_interests,
-                            departments=departments, selected_department=department,
                             department_participants=department_participants,
-                            sex_participation=sex_participation,
-                            award_years=award_years, award_year=award_year,
-                            leaderboards=leaderboards), (400 if campus_error else 200)
+                            sex_participation=sex_participation), (400 if context['campus_error'] else 200)
 
 
 @director_bp.route('/reports/campus.csv')

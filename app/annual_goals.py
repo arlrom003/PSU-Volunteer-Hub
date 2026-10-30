@@ -2,6 +2,7 @@
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
+from flask_login import current_user
 from collections import defaultdict
 import operator
 from sqlalchemy.orm import joinedload
@@ -221,15 +222,15 @@ def comparisons(year=None, sample=False):
             for campus in Campus.query.order_by(Campus.name, Campus.id).all()]
 
 
-def campus_ranking(campuses):
+def campus_ranking(campuses, lowest=False):
     """Rank the existing summaries by exact achievement ratios, retaining ties."""
     rows = sorted((campus for campus in campuses if campus['total'] > 0),
-                  key=lambda campus: (-Fraction(campus['met'], campus['total']),
+                  key=lambda campus: ((1 if lowest else -1) * Fraction(campus['met'], campus['total']),
                                       campus['campus'].casefold(), campus['campus_id']))
     if not rows:
         return dict(state='unavailable', rows=[], leaders=[])
     best = Fraction(rows[0]['met'], rows[0]['total'])
-    leaders = [campus for campus in rows if Fraction(campus['met'], campus['total']) == best] if best else []
+    leaders = [campus for campus in rows if Fraction(campus['met'], campus['total']) == best] if best or lowest else []
     return dict(state='ranked' if leaders else 'zero', rows=rows, leaders=leaders)
 
 
@@ -239,7 +240,8 @@ def dashboard_context(year=None, campus_id=None):
     sample = request.args.get('sample') == '1'
     plan = summary(year, campus_id, sample)
     if campus_id is None:
-        ranking = campus_ranking(comparisons(year, sample))
+        ranking = campus_ranking(comparisons(year, sample),
+                                 lowest=request.endpoint == 'director.director_dash' and getattr(current_user, 'role', None) == 'director')
         for campus in ranking['rows']:
             campus['detail_url'] = url_for('goals.details', year=year, campus=campus['campus_id'],
                                            sample=1 if sample else None)

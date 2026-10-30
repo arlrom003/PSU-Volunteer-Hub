@@ -1,29 +1,311 @@
 # PSU Volunteer Hub — Continuation Handoff
 
+## Current handoff: 31 October 2026
+
+Read this section first. It supersedes older status and next-step statements
+below, which remain dated evidence. This documentation update changes no runtime
+code, database, deployment, credentials, or repository publication.
+
+### Goal and current working state
+
+The current goal is a clear PSU reporting experience for Directors and Campus
+Coordinators: annual goals, recognition, schedules, actionable follow-ups, and
+consistent report evidence. The latest Director layout was implemented and tested
+in an isolated worktree, then integrated into the original workspace after the
+user could not see it in the running application. The local dashboard was
+refreshed and visibly verified in the user's existing Brave session.
+
+- **Active application workspace:** `C:\Users\arlro\Desktop\PSU VOLUNTEER\Psu_VolunteerHub`.
+  The development server runs this workspace's `app.py` at
+  `http://127.0.0.1:5000`. An isolated worktree alone does not update that server.
+- **Local Git:** original `main` is at `e2e9e6e`, three commits behind the remote
+  tip. Its working files include the later performance changes, the new Director
+  layout, and separate uncommitted security/recovery/demo-reset work. Do not
+  discard, blindly stash, reset, pull over, or commit that mixed working tree.
+- **Isolated implementation:** branch `codex/director-dashboard-recognition`,
+  based on `03d1fc1`, at
+  `C:\Users\arlro\.codex\visualizations\2026\10\30\01a18bce-742f-71c0-99af-23e325817c86\director-dashboard`.
+  The latest layout is still working-tree content there, not a new commit.
+- **Publication verified read-only on 31 October:** both remote `main` branches
+  resolve to `03d1fc15b8fea0833128d206d0c3958de72d15c8`.
+  `origin` is `https://github.com/Xed-stack/Psu_VolunteerHub.git`;
+  `thesis` is `https://github.com/arlrom003/PSU-Volunteer-Hub.git`.
+  Both include the earlier dashboard/calendar/Title Case work (`9407761`,
+  `e2e9e6e`), report-timeout fix, and system-performance release.
+- **Not published:** the latest Worst Performing Campus/recognition/calendar/
+  dashboard-filter relocation, this handoff refresh, and unrelated local edits.
+  A successful Git push is not evidence that Railway deployed that revision.
+  Hosted deployment and performance of the latest published revision remain
+  unverified here.
+
+### Final decisions and reasons
+
+| Area | Current decision and reason |
+| --- | --- |
+| Director annual hero | Worst Performing Campus uses the **lowest exact annual goal-achievement ratio**. Include zero achievement and ties; exclude campuses without approved targets. This changes the ranking, not merely its label. Other views retain their highest-campus ranking. |
+| Director briefing | Outstanding Recognition is left of the complete university Activity Calendar. Equal desktop columns/heights and aligned headings become stacked panels on narrow screens. Recognition moved out of Director Analytics. |
+| Independent scopes | `goal_year`, `award_year`, `calendar_year`/`calendar_month`, and report filters remain independent. Navigation and form submissions retain the other settings. Recognition keeps its original calendar-year rules. |
+| Cross-Campus Comparison | Permanently visible below Performance Overview. Holds Filters and Reports, CSV/PDF exports, coverage, and links to scoped analytics. **The campus registration/attendance chart and Campus Attendance Outcomes table stay in Director Analytics**, per the user's revised plan. |
+| Analytics and roles | Director Analytics displays Selected Report Scope and Change Filters. Its details, follow-ups, trends, demographics, historical view, charts, and outcomes remain. Admin's shared analytics keeps its own filters/exports/comparisons. Coordinator changes in the latest pass are limited to preview removal and obsolete onboarding copy. |
+| Campus coverage | Neutral activity-record coverage for included campuses in the report scope, not a performance grade. Unassigned activities remain in participation totals but do not count as campus coverage. Invalid campus selections fail closed. |
+| Coordinator follow-ups | Five activities per `attention_page`; three 44px square controls: previous chevron, one filled current-page number, next chevron. Arrows disable at boundaries; omit pagination for a single page. |
+| Coordinator hero/workspace | PSU gold `#f6bf22` at **2% background alpha**, fully opaque content; 56px desktop/40px mobile separation. Apply Year and Campus Goal Proposals retain primary blue styling. Full calendar, hidden-only Performance Period label, and permanently visible Manage Activities remain. |
+| Preview buttons | Preview Sample Data is removed from both dashboards. Existing sample URLs and analytics previews remain compatible; the sample-data feature was not deleted. |
+| Grouping and copy | Analytics details use native disclosures; deep links reveal their containers. Interface labels use standard Title Case while prose and authored data retain their casing. How These Numbers Are Counted was removed; concise attendance context and provisional labels remain. |
+| Counts and performance | Shared report-scope parsing and batched evidence feed totals, coverage, analytics, and exports. Preserve the report/performance optimizations; no new dependencies, routes, schema, export formats, or counting rules. |
+
+### Ruled out or superseded
+
+- Three-item follow-up pages, adjacent-page dots, and 10% yellow tint were
+  earlier iterations; do not restore them over five items, square arrows/current
+  number, and 2% tint.
+- Moving the campus chart or Campus Attendance Outcomes onto the dashboard was
+  explicitly reversed by the user. Move only the Director controls/exports and
+  coverage; preserve those analytics visualizations and Admin's layout.
+- A label-only change to the highest-ranked campus, using attendance/activity
+  volume as the worst-campus measure, and treating missing targets as zero
+  achievement do not meet the approved annual-goal definition.
+- Director dashboard Needs Attention, Upcoming Activities in place of the full
+  Coordinator calendar, and a collapsed Manage Activities workspace are obsolete.
+- Do not replace native controls with a UI framework, add decorative charts,
+  capitalize authored names automatically, or change stored history to support UI.
+- Do not solve visibility by changing credentials, reseeding data, deploying,
+  force-pushing, or serving only an isolated worktree without checking the user's
+  actual application path.
+
+### Relevant implementation files
+
+| Purpose | Sources |
+| --- | --- |
+| Director layout and scope | `app/routes/director.py`, `templates/director/Director_Dash.html` |
+| Director/Admin analytics distinction | `templates/director/Director_impact_anlaytics_dash.html` |
+| Exact ranking and report evidence | `app/annual_goals.py`, `app/dashboard.py`, `app/reports.py` |
+| Shared hero, filters, calendar | `templates/partials/dashboard_ui.html`, `templates/partials/university_report_filters.html`, `templates/partials/campus_calendar.html` |
+| Existing calendars and Coordinator workspace | `templates/director/activity_calendar.html`, `app/routes/coordinator.py`, `templates/coordinator/Coordinator_dash.html` |
+| PSU presentation and navigation | `static/styles/base.css`, `static/styles/role-shell.css`, `static/styles/director.css`, `static/styles/coordinator.css` |
+| Charts, anchors, onboarding | `static/scripts/charts.js`, `static/scripts/disclosure-links.js`, `static/scripts/first-use-tour.js` |
+| Latest tests | `tests/test_director_dashboard_layout.py`, `tests/test_campus_ranking.py`, `tests/test_dashboard_groups.py`, `tests/test_app.py` |
+| Scope/performance regression tests | `tests/test_dashboard_followups.py`, `tests/test_coordinator_dashboard_calendar.py`, `tests/test_dashboard_decisions.py`, `tests/test_system_performance.py`, `tests/test_report_queries.py` |
+
+### Skills actually used and rules to carry forward
+
+Resolve installed skill paths from the next session's catalog. Local design
+skills currently live under `C:\Users\arlro\.codex\skills`; Computer Use is a
+bundled plugin skill with a versioned path. Read the actual `SKILL.md` files
+instead of treating this summary as a substitute. No new skill was installed.
+
+| Skill | Applied rules and evidence |
+| --- | --- |
+| `kpi-dashboard-design` | Keep metric definitions, denominators, periods, and report scope consistent; separate annual strategy, daily operations, and detailed evidence. Exact count labels and semantic chart tables retain readable evidence. |
+| `ui-ux-pro-max` | Prioritize semantic labels, visible focus, 44px targets, responsive reflow, meaningful chart legends, and explicit empty/error/selected states. Preserve PSU tokens and avoid additional dependencies. |
+| `ponytail`, full | Reuse existing helpers, styles, and components; prefer native HTML and standard-library behavior. Fix the root cause once, keep changes small, and avoid speculative abstractions or schema work. |
+| `frontend-design` | Complete a design read for PSU staff, hierarchy, typography, spacing, and primary actions before editing. Retain Inter, PSU blue/gold, and ENERGY 1 / RHYTHM 2 / MOTION 1 for this dashboard work. |
+| `antislop`, during work | The user already chose during-work application. Apply purpose and identity checks as changes are made, then record Hard Gate, Purpose Gate, Liveliness, and Craftsmanship results with evidence. Do not ask the same mode question again in this conversation. |
+| `antislop-ui` | Use visual treatments to explain hierarchy, scope, or interaction. Retain the PSU identity; avoid generic decoration, gratuitous motion, and duplicate chart/component systems. |
+| `antislop-human` | Verify keyboard operation, focus, labels, states, and contrast. Measured pairs pass at 7.71:1, 8.88:1, and 9.97:1. Do not claim screen-reader verification from a DOM or keyboard check. |
+| `antislop-layoutmobile` | Design the stacked layout intentionally; retain 44px controls, wrap long data, and contain calendar/table overflow with a labelled focusable region and hint. |
+| `web-design-guidelines` | Fetch the current guidelines before the final UI audit; review semantics, heading hierarchy, focus, anchors beneath fixed headers, reflow, and state handling. Latest audit corrected nested heading levels, paired heading alignment, and anchor offsets. |
+| `computer-use:computer-use` | Inspect the actual running app/window, use documented UI APIs and fresh observations, and verify the visible result. The user's Brave tab at the local URL confirmed integration; no account credentials or saved passwords were changed. |
+
+Project `AGENTS.md` remains authoritative for the installed PSU workflow, subject
+to the user's instructions. Preserve unrelated edits; use native reversible
+operations; distinguish local verification from publication, deployment, and
+live-data execution. The latest UI gates passed with evidence in the QA report.
+The separate security report is preserved evidence, not a new security audit
+performed by this dashboard/documentation task.
+
+### How to verify and next step
+
+1. Inspect `git status`, `git worktree list`, local HEAD, and both remote tips.
+   Reconcile the lagging original branch before any later publication; use a
+   reviewed isolated snapshot rather than committing all mixed local edits.
+2. Open `http://127.0.0.1:5000/director_dash` in the running original workspace.
+   Verify Worst Performing Campus, recognition/calendar pairing, no preview
+   button, and visible Cross-Campus Comparison. Follow comparison/outcome links
+   and Change Filters; the chart and outcomes must remain in Analytics.
+3. Check award-year/month/report-filter independence, include/exclude campuses,
+   zero/empty/error cases, CSV/PDF agreement, deep links, and report pagination.
+   Check Coordinator's five-item square pagination, 2% hero, full calendar, hidden
+   accessible period label, and always-visible workspace. Check Admin analytics.
+4. Use the project virtual environment and isolated test fixtures:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider tests/test_director_dashboard_layout.py tests/test_campus_ranking.py tests/test_dashboard_groups.py tests/test_dashboard_followups.py tests/test_coordinator_dashboard_calendar.py
+   .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider tests/test_system_performance.py tests/test_report_queries.py tests/test_dashboard_decisions.py tests/test_responsive_tables.py
+   .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider tests/test_app.py -k "TestAnalytics or TestReportingSystem or director_dashboard_keeps_advanced_filters or director_analytics or TestActivityCalendarViews"
+   node tests/charts.test.cjs
+   git diff --check
+   ```
+
+   These tests use synthetic test databases, not the running MySQL dataset. For
+   Windows temporary-directory permission errors, choose a new writable
+   `--basetemp` and the necessary test-process permissions; do not change the live
+   database configuration to make tests run.
+5. Latest recorded evidence: **200 distinct affected Python cases, four chart
+   tests, and 219 browser assertions** passed in the isolated implementation;
+   **22 focused cases** passed again after original-workspace integration. Those
+   are targeted results, not a new full-suite result. Older 458-pass/full-suite
+   and performance timing/count reports remain dated evidence.
+6. Browser coverage used 1686px, 1440px, 1024px, 390px, and 640 × 450 reflow
+   equivalent to 200% zoom. All six Director tour steps completed. Native 200%
+   browser zoom, screen-reader output, physical-phone checks, and latest hosted
+   deployment/performance remain open. Screenshots and synthetic browser scripts
+   are local artifacts under the visualization directory, not required source
+   files or production auth helpers.
+7. **Next action:** review the integrated local layout with the user and address
+   any requested refinement. Commit/push only when requested, with the intended
+   repository and exact scope clear. This handoff does not authorize deployment,
+   database reset, account changes, migration, or paid infrastructure changes.
+   Off-site encrypted database/upload backups and a private-file restore drill
+   remain later operational work, not an action to execute just by reading this.
+
+### Documentation map
+
+- [DIRECTOR_DASHBOARD_QA.md](DIRECTOR_DASHBOARD_QA.md): latest layout, scope,
+  ranking, verification, and UI gates.
+- [COORDINATOR_CALENDAR_QA.md](COORDINATOR_CALENDAR_QA.md): retained calendar,
+  spacing, tint, pagination, and Title Case history; latest preview removal wins.
+- [SYSTEM_PERFORMANCE_QA.md](SYSTEM_PERFORMANCE_QA.md): published query/payload
+  optimization evidence. [SECURITY_REMEDIATION.md](SECURITY_REMEDIATION.md),
+  [PASSWORD_RECOVERY_QA.md](PASSWORD_RECOVERY_QA.md), and
+  [DEMO_DATASET_QA.md](DEMO_DATASET_QA.md) describe separate local workstreams;
+  do not silently bundle them with the Director changes.
+- [README.md](README.md) for setup, [VOLUNTEER_HUB_ROADMAP.md](VOLUNTEER_HUB_ROADMAP.md)
+  for priorities, [RAILWAY_DEMO_DEPLOYMENT.md](RAILWAY_DEMO_DEPLOYMENT.md) for
+  deployment boundaries, and [BACKUP_RESTORE_RUNBOOK.md](BACKUP_RESTORE_RUNBOOK.md)
+  for recovery procedures.
+
+## Earlier dated records
+
+The entries below preserve original measurements and decisions. Publication,
+layout, or next-step statements there apply to their dates and are superseded
+by the current handoff above where they differ.
+
+## System loading performance (30 October 2026, pushed to both repositories)
+
+The user asked to fix overall slow loading and chose antislop during the admin
+pagination work. This pass batches annual participation, recommendation history,
+candidate skills, recognition counts, forecasts and related template data. Admin
+users/deactivated users/activity logs now paginate 25 rows. Public packaged assets
+can revalidate normally; authenticated HTML, uploads and errors keep `no-store`.
+
+On isolated 200-event/5,000-registration data, coordinator dashboard queries fell
+418→28, coordinator analytics 460→24, the 2026 director recognition view 807→42,
+volunteer dashboard 76→31 and profile 80→34. Admin HTML fell 1,547,541→67,755 bytes.
+These are local query/payload measurements, not hosted timing guarantees.
+179 broader tests passed; the final performance module passed all 25 tests.
+Desktop/375px/320px browser pagination, keyboard focus, empty state, contrast,
+template formatting and the Web Interface Guidelines audit passed for changed UI.
+See `SYSTEM_PERFORMANCE_QA.md` for scope, measurements and limitations.
+
+Push follow-up: both `origin/main` and `thesis/main` were updated to
+`03d1fc15b8fea0833128d206d0c3958de72d15c8`; both remote SHAs were verified after push.
+32 performance/timeout regressions passed on the isolated publishable snapshot,
+and its Git tree matched the final common commit. The earlier report-timeout fix
+is now included in both repositories. A concurrently published upstream merge
+`3392da1` was preserved. No force push was used.
+
+Unrelated security/recovery/demo-reset edits were excluded. The shipped
+performance fixture uses the existing marker-only demo CLI confirmation; the
+original workspace's test still matches its separate, unpublished broader reset.
+Original local `main` and its uncommitted files remain intact; the pushes came
+from isolated worktrees under this chat's visualization directory. Reconcile the
+new remote revision before future pushes from this original workspace.
+Railway deployment completion and hosted performance remain unverified. No
+database, schema, dependency, Railway setting or paid plan was changed.
+
+## Director dashboard worker timeout (30 October 2026)
+
+Railway logs show `WORKER TIMEOUT` while `build_events_report` lazily loads
+registration attendance for `/director_dash`. An isolated 200-event,
+5,000-registration regression reproduced 5,802 report queries before the fix.
+The local `app/reports.py` change batches registration/attendance counts and
+eager-loads campus/SDG labels; the same regression now uses at most four queries.
+Existing demographic filters, whole-event attendance completeness, cancellations,
+and report totals are retained. No timeout increase or schema change is needed.
+
+Verification: 148 focused report, dashboard, analytics, annual-goal, campus-ranking
+and demo-dataset tests passed in 383.66 seconds with isolated SQLite databases.
+The demo smoke test covers director/coordinator pages and university CSV export.
+`git diff --check` and Python compilation passed. Push follow-up: commit
+`6696e11` was pushed to `thesis/main` with only the timeout fix and
+`tests/test_report_queries.py`. Another 67 focused tests passed against the exact
+deployment-branch checkout before push; the remote SHA was verified afterward.
+Railway build completion and hosted MySQL/dashboard behavior remain unverified.
+No database reset or hosted data changes were performed. Earlier local changes
+are preserved, including the separate CSV/PDF security changes in `app/reports.py`.
+
+The push was prepared on `codex/fix-director-report-timeout` in the isolated
+worktree under the current chat's visualization directory (`director-timeout-push`).
+The original workspace stays on local `main` at `e2e9e6e`, with its existing
+uncommitted changes. Its two unpublished UI commits were excluded from this push;
+reconcile the new remote timeout commit before a future push from local `main`.
+
 ## Demonstration dataset command (30 October 2026)
 
 `reset-and-seed-demo --database railway` provides a read-only
-`--dry-run` preview and explicit typed target confirmation. It preserves all
-existing login accounts/passwords, including the required student, coordinator
-and director accounts, and replaces only marked demo records. The new fixture
+`--dry-run` preview and explicit typed target confirmation. A local follow-up now
+clears all demo activity/participation data, historical records, notifications and
+activity logs, and deletes every account except `student@psu.edu`,
+`coordinator@psu.edu` and `director@psu.edu`. Those three retain IDs/passwords,
+profile records, skills/interests and policy acceptances. Reference catalogues and
+policy revisions remain; synthetic users are regenerated. Activity titles no
+longer have the visible demo prefix. Confirmation is now `RESET ALL DEMO <target>`.
+The new fixture
 contains 200 events, 5,000 registrations, 4,000 attendance, 200 external volunteers,
 150 cancellation requests and SDG mappings across the existing campuses.
-Focused isolated CLI/import/provisioning checks: 15 passed in 27.58 seconds.
+Current isolated CLI/import/provisioning checks: 15 passed in 27.23 seconds.
 See `DEMO_DATASET_QA.md` for exact scope, target checks, limitations and commands.
-Publication of this command, tests and related documentation is authorized to
-`thesis/main`. Hosted deployment and database execution remain unverified.
-Unrelated security/recovery changes remain local and outside this publication.
+The earlier marker-only version is on `thesis/main` as `2872af3`. This broader
+reset follow-up is local and not yet published, deployed or run against Railway.
+Unrelated security/recovery changes remain local and outside this task.
+
+## Historical status: 29 October 2026
+
+- Password recovery is deployed on the main and demo Railway apps through
+  Brevo's HTTPS API. The user confirmed real email receipt, temporary-password
+  sign-in, permanent-password replacement and subsequent sign-in on both apps.
+  This is user-confirmed verification, not agent inspection of their inbox or
+  credentials. See `PASSWORD_RECOVERY_QA.md` for the evidence and limitations.
+- Main: `https://psu-volunteer-hub-production.up.railway.app`.
+  Demo: `https://psu-volunteer-hub-demo-production.up.railway.app`.
+  Both existing MySQL services were restarted with separate user approval using
+  their saved configurations and volumes; no import or schema change was made.
+  Brevo accepted read-only API requests from both services. API IP blocking stays
+  enabled for the two approved app addresses; no key permissions were expanded.
+- The deployment repository is `https://github.com/arlrom003/PSU-Volunteer-Hub`,
+  remote `thesis`, branch `main`. Recovery release `659500e` and follow-up
+  `d940c32` were pushed. Remote `origin` points to the separate
+  `Xed-stack/Psu_VolunteerHub` repository; do not assume it is the deployment
+  destination. Deployment of `d940c32` was not independently rechecked after push.
+- Before that push, 90 selected app tests passed (222 deselected), and the demo
+  analytics seed passed an isolated repeat-run check. Seven vendor skill CLI
+  tests fail on Windows because required OS file-protection flags are unavailable.
+  The older 458-pass full-suite result below is historical, not a full-suite
+  result for the latest revision.
+- Next recommended work is encrypted off-site database/upload backups and a
+  restore drill in a separate environment, including private milestone files.
+  Actual 200% browser zoom, screen-reader and physical-phone checks remain open.
+  No new backup configuration, restore, policy publication or paid upgrade has
+  been performed as part of this documentation update.
+
+Earlier dated entries below are historical snapshots. Their pending Railway,
+email and publication statements are superseded by this status where applicable.
 
 ## Start here in a new chat
 
 The user can say: **Read HANDOFF.md and continue from the current local files.**
 
-1. Read this file, `VOLUNTEER_HUB_ROADMAP.md`, `DASHBOARD_REDESIGN_QA.md`, and
+1. Read the current handoff above, `DIRECTOR_DASHBOARD_QA.md`,
+   `COORDINATOR_CALENDAR_QA.md`, `SYSTEM_PERFORMANCE_QA.md`,
+   `VOLUNTEER_HUB_ROADMAP.md`, `DASHBOARD_REDESIGN_QA.md`, and
    `PROFILE_REPAIR_QA.md`. Inspect `git status` and the actual local changes
    before editing; do not assume GitHub contains the latest iteration.
 2. Preserve the dashboard redesign, first-use walkthroughs, volunteer profile
    repair, and any uncommitted changes. Do not discard or overwrite unrelated work.
 3. Read the applicable installed skills completely before using them:
+   - **`kpi-dashboard-design` and `ui-ux-pro-max`:** preserve metric/scope
+     consistency, readable chart evidence, hierarchy, and accessible controls.
    - **`ponytail` (full):** use existing helpers, native controls, and the smallest
      safe, maintainable implementation. Do not sacrifice validation or accessibility.
    - **`antislop` + `antislop-ui`:** apply during implementation, not only after it.
@@ -127,7 +409,8 @@ statements are delivery-time snapshots; see REPAIR_RELEASE_QA.md for final resul
 Copied databases, uploads,
 diagnostic scripts, screenshots, and downloaded reports are not included in Git.
 
-- Repository: `https://github.com/Xed-stack/Psu_VolunteerHub`
+- Deployment repository: `https://github.com/arlrom003/PSU-Volunteer-Hub`
+- Separate `origin` repository: `https://github.com/Xed-stack/Psu_VolunteerHub`
 - Branch: `main`
 - Current local workspace: `C:\Users\arlro\Desktop\PSU VOLUNTEER\Psu_VolunteerHub`
 - Start MySQL from XAMPP, then run the Flask application with:
@@ -576,7 +859,7 @@ Also apply `migrations/20260912_add_audit_logs.sql` and `migrations/20260912_add
 
 Apply `migrations/20261016_director_demographics_sdgs.sql` before using the Director demographics and SDG features against an existing MySQL database. Then restart Flask so the built-in SDG catalogue seed can verify the 17 official goals.
 
-Apply `migrations/20261016_security_hardening.sql` before deploying the security update to an existing MySQL database. It adds session-version invalidation, database-backed authentication throttling, and password-reset tokens. Production also requires `SECRET_KEY`, `DATABASE_URL`, HTTPS behind a trusted proxy, a writable `PRIVATE_UPLOAD_FOLDER` outside the web root, and SMTP configuration for reset emails.
+Apply `migrations/20261016_security_hardening.sql` before deploying the security update to an existing MySQL database that lacks those changes. It adds session-version invalidation, database-backed authentication throttling, and password-reset tokens. Production also requires `SECRET_KEY`, `DATABASE_URL`, HTTPS behind a trusted proxy, a writable `PRIVATE_UPLOAD_FOLDER` outside the web root, and configured email delivery. The Railway apps use Brevo's HTTPS API; see `PASSWORD_RECOVERY_QA.md`. Do not rerun migrations on an existing hosted schema without comparing it first.
 
 Historical CSV data can be imported with:
 

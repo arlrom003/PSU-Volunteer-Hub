@@ -81,6 +81,7 @@ def query_count(instance):
     ('volunteer', '/volunteer_dash', 40), ('volunteer', '/profile', 40),
     ('coordinator', '/coordinator_dash', 35), ('coordinator', '/coordinator_analytics', 30),
     ('director', f'/analytics?period=all&award_year={REPORT_YEAR}', 50),
+    ('director', f'/director_dash?period=all&award_year={REPORT_YEAR}', 50),
     ('admin', '/admin_dash', 15), ('admin', '/admin_dash?tab=audit', 15),
 ])
 def test_large_dataset_page_query_budgets(system_app, role, path, budget):

@@ -70,19 +70,6 @@
   background: var(--primary);
 }
 
-.calendar-nav { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
-.calendar-day--empty { background: var(--surface-low); }
-.calendar-entry { background: var(--primary-light); color: var(--primary); display: block; font-size: .8rem; font-weight: 700; margin-top: .3rem; padding: .3rem; text-decoration: none; min-height: 44px; overflow-wrap: anywhere; }
-.calendar-entry small { display: block; font-weight: 400; margin-top: .2rem; }
-.campus-calendar__hint { margin: 0 0 8px; color: var(--on-surface-variant); font-size: .875rem; }
-.campus-calendar__scroll { min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
-.campus-calendar__scroll:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
-.campus-calendar { width: 100%; min-width: 42rem; table-layout: fixed; border-collapse: collapse; }
-.campus-calendar th { padding: .5rem .25rem; background: var(--surface-container-low); color: var(--on-surface-variant); font-size: .8rem; text-align: center; }
-.campus-calendar td { height: 4.5rem; padding: .35rem; border: 1px solid var(--outline-variant); vertical-align: top; }
-.campus-calendar .calendar-entry:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
-.campus-calendar .calendar-entry:hover { text-decoration: underline; }
-.calendar-nav .btn { min-height: 44px; }
 /* Activity SDG choices are intentionally compact but retain native controls. */
 .choice-fieldset { display: block; width: 100%; border: 1px solid var(--border, #cbd5e1); border-radius: .5rem; padding: 1rem; }
 .choice-fieldset legend { font-weight: 700; padding: 0 .25rem; }

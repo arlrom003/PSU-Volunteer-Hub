@@ -14,7 +14,7 @@
       ['help', 'Get help when needed', 'The Help page explains registration, attendance, recommendations, and account access.'],
     ],
     coordinator: [
-      ['annual-goals', 'Track Campus Goals', 'The large number shows approved annual targets achieved. Open it for AOP and ASP evidence, or use Campus Goal Proposals to submit a target for director approval. Sample previews are labelled separately.'],
+      ['annual-goals', 'Track Campus Goals', 'The large number shows approved annual targets achieved. Open it for AOP and ASP evidence, or use Campus Goal Proposals to submit a target for director approval.'],
       ['summary', 'Start with Campus Follow-Up', 'Review cancellation requests and complete attendance for ended activities. This unresolved work covers all dates; performance below uses its own reporting period.'],
       ['create-activity', 'Create an Activity', 'Add the activity details, target, cancellation deadline, and applicable SDGs before publishing.'],
       ['activity-workspace', 'Manage Activities', 'Use the activity filters and campus list to record attendance, publish updates, and upload milestones. The workspace is always visible below Performance Overview.'],
@@ -23,12 +23,12 @@
       ['analytics', 'Use Analytics and Reports', 'Filter campus results, review attendance outcomes, then download the matching CSV or PDF report.'],
     ],
     director: [
-      ['annual-goals', 'Review Annual-Plan Achievement', 'Open the large number for university targets and campus goal comparisons. Review goal proposals to approve campus targets. AOP and ASP retain their own counts; attendance by recorded sex is separate evidence.'],
-      ['campus-comparison', 'Compare Registrations and Attendance', 'Compare campus sign-ups with recorded attendance for the selected period. Repeated participation counts per activity; historical source records have their own separate view.'],
-      ['analytics', 'Filter the Evidence', 'Analytics filters keep their scope through pagination and report downloads.'],
-      ['recognition', 'Review Recognition and Demographics', 'Open internal analytics to review declared demographic responses and verified PSU participation rankings.'],
-      ['reports', 'Download Reports', 'Apply the analytics filters, then choose CSV or PDF to download the matching activity report.'],
-      ['calendar', 'Open the Activity Calendar', 'Use the read-only calendar to review scheduled activities across PSU campuses.'],
+      ['annual-goals', 'Review Annual-Plan Achievement', 'Open university targets and campus goals. Worst Performing Campus shows the lowest annual goal-achievement rate among campuses with approved targets, including ties and zero achievement.'],
+      ['recognition', 'Review Outstanding Recognition', 'Review university-wide volunteer and campus rankings. Award Year is independent of report filters and the calendar month.'],
+      ['calendar', 'Review the Activity Calendar', 'Review the complete university schedule for a month. Open an activity for its report evidence, or open the full calendar.'],
+      ['campus-comparison', 'Compare Campuses', 'Set the report filters and review campus activity coverage. Open Analytics for the matching campus participation chart, attendance outcomes, and detailed activity report.'],
+      ['reports', 'Download Reports', 'Choose CSV or PDF to download every activity matching the dashboard report filters.'],
+      ['analytics', 'Review Detailed Analytics', 'The selected report scope follows you into Analytics and stays consistent through pagination and report downloads.'],
     ],
     admin: [
       ['summary', 'Check the system summary', 'Review the current database connection and account totals before making administrative changes.'],

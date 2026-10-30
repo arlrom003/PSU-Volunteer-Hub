@@ -1,8 +1,8 @@
 {% from 'partials/info_tip.html' import info_tip %}
 
-{% macro heading(title, explanation, context='') -%}
+{% macro heading(title, explanation, context='', level=2) -%}
   <header class="panel__header"><div class="panel__heading">
-    <div class="heading-with-tip"><h2>{{ title }}</h2>{{ info_tip(title, explanation) }}</div>
+    <div class="heading-with-tip"><h{{ level }}>{{ title }}</h{{ level }}>{{ info_tip(title, explanation) }}</div>
     {% if context %}<p class="panel__context">{{ context }}</p>{% endif %}
   </div></header>
 {%- endmacro %}
@@ -26,7 +26,7 @@
       {% set ranking = plan.campus_ranking %}
       <details class="goal-participation goal-campus-ranking">
         <summary>
-          <span>Top-Performing Campus</span>
+          <span>{{ 'Worst Performing Campus' if request.endpoint == 'director.director_dash' and current_user.role == 'director' else 'Top-Performing Campus' }}</span>
           {% if ranking.state == 'unavailable' %}
             <strong>Not Available</strong><span>No approved campus targets for this year.</span>
           {% elif ranking.state == 'zero' %}
@@ -36,10 +36,11 @@
             <strong>{{ leader.campus if ranking.leaders|length == 1 else (ranking.leaders|length|string ~ ' Campuses Tied') }}</strong>
             <span>{{ leader.rate }}%{% if ranking.leaders|length == 1 %} · {{ leader.met }} of {{ leader.total }} Goals Achieved{% endif %}</span>
           {% endif %}
-          <span class="goal-participation__basis">Annual Goals Achieved{% if plan.sample %} · Sample Data{% endif %}</span>
+          <span class="goal-participation__basis">{{ 'Lowest Annual Goal-Achievement Rate' if request.endpoint == 'director.director_dash' and current_user.role == 'director' else 'Annual Goals Achieved' }}{% if plan.sample %} · Sample Data{% endif %}</span>
           <span class="goal-hero__cue">View Campus Ranking</span>
         </summary>
         <div class="goal-participation__breakdown">
+          {% if request.endpoint == 'director.director_dash' and current_user.role == 'director' %}<p>Lowest annual goal-achievement rate among campuses with approved targets. Zero achievement and tied campuses are included.</p>{% endif %}
           <p>Each campus is assessed against its own approved targets. Pending evidence stays in the denominator.</p>
           <ul class="goal-ranking-list">
           {% for campus in ranking.rows %}
@@ -60,7 +61,7 @@
     <nav class="goal-overview__actions" aria-label="Annual Goal Workspaces">
       {% if not plan.sample and current_user.role != 'admin' %}<a class="btn {{ action_style }}" href="{{ plan.workspace_url }}">{{ 'Review Goal Proposals' if current_user.role == 'director' else 'Campus Goal Proposals' }}{% if plan.proposal_count %} ({{ plan.proposal_count }}){% endif %}</a>{% endif %}
       {% if current_user.role == 'director' %}<a class="btn btn--outline" href="{{ plan.detail_url }}#campus-results">Compare Campus Goals</a>{% endif %}
-      {% if not plan.sample %}<a class="btn {{ action_style }}" href="{{ url_for(request.endpoint, goal_year=plan.year, sample=1) }}">Preview Sample Data</a>{% endif %}
+      {% if not plan.sample and request.endpoint not in ['director.director_dash', 'coordinator.coordinator_dash'] %}<a class="btn {{ action_style }}" href="{{ url_for(request.endpoint, goal_year=plan.year, sample=1) }}">Preview Sample Data</a>{% endif %}
     </nav>
   </section>
 {%- endmacro %}

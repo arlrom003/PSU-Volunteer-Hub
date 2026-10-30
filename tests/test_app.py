@@ -741,14 +741,14 @@ class TestPhaseOnePublicExperience:
         assert 'Role Demographics' not in historical
         assert 'Live Activity Report' in invalid
 
-    def test_live_analytics_keeps_advanced_filters_out_of_the_primary_scope(self, client, app):
+    def test_director_dashboard_keeps_advanced_filters_out_of_the_primary_scope(self, client, app):
         director_id = _create_user(
             app, email='analytics-filters@test.com', role='director', campus_id=1)
         _login_as(client, director_id)
 
-        default = client.get('/analytics?view=live').get_data(as_text=True)
+        default = client.get('/director_dash').get_data(as_text=True)
         advanced = client.get(
-            '/analytics?view=live&sex=female&campus_mode=include&campus=1'
+            '/director_dash?sex=female&campus_mode=include&campus=1'
         ).get_data(as_text=True)
         csv_href = re.search(
             r'href="([^"]*/reports/university\.csv[^"]*)"', advanced).group(1)
@@ -2516,7 +2516,8 @@ class TestReportingSystem:
         assert ('Youth Coding Mentor' in csv) == (mode == 'include')
         assert ('Unassigned fixture' in csv) == (mode == 'exclude')
         assert ('All campuses except:' if mode == 'exclude' else 'Selected campuses:') in csv
-        labels = re.findall(r'<span>([^<]+)</span>', body.split('campus-filter__grid', 1)[1].split('</fieldset>', 1)[0])
+        dashboard_body = client.get('/director_dash', query_string=query).get_data(as_text=True)
+        labels = re.findall(r'<span>([^<]+)</span>', dashboard_body.split('campus-filter__grid', 1)[1].split('</fieldset>', 1)[0])
         assert labels == sorted(labels, key=str.lower)
         def pdf(rows, summary, meta):
             assert summary['event_count'] == expected
@@ -2555,7 +2556,8 @@ class TestReportingSystem:
         document = parse_html(body)
         links = [link.attrs['href'] for link in document.all('a')]
         next_page = next(link for link in links if 'page=2' in link)
-        exports = [link for link in links if '/reports/university.' in link]
+        dashboard = parse_html(client.get('/director_dash', query_string=query).get_data(as_text=True))
+        exports = [link.attrs['href'] for link in dashboard.all('a') if '/reports/university.' in link.attrs.get('href', '')]
         assert {urlsplit(link).path for link in exports} == {'/reports/university.csv', '/reports/university.pdf'}
         for link in [next_page] + exports:
             parsed = parse_qs(urlsplit(link).query)
@@ -2571,10 +2573,10 @@ class TestReportingSystem:
         assert len(first_titles) == 10 and len(second_titles) == 3
         assert first_titles + second_titles == expected
 
-        award = form_with_control(document, 'award_year', tags=('select',))
+        award = form_with_control(dashboard, 'award_year', tags=('select',))
         values = form_values(award)
         assert values == {**{key: [value] for key, value in query if key != 'campus'},
-                          'campus': ['1', '2'], 'view': ['live'], 'award_year': ['2026']}
+                          'campus': ['1', '2'], 'award_year': ['2026']}
         assert 'Historical Activities' not in body
         award_page = client.get('/analytics', query_string=values)
         assert award_page.status_code == 200
@@ -3599,7 +3601,8 @@ class TestAnalytics:
             assert summary['event_count'] == 12
             return b'%PDF-filter-scope'
         monkeypatch.setattr('app.routes.director.render_pdf', pdf)
-        exports = [link.attrs['href'] for link in document.all('a')
+        dashboard = parse_html(client.get('/director_dash', query_string=filters).get_data(as_text=True))
+        exports = [link.attrs['href'] for link in dashboard.all('a')
                    if urlsplit(link.attrs.get('href', '')).path in
                    ('/reports/university.csv', '/reports/university.pdf')]
         assert len(exports) == 2
@@ -3825,7 +3828,7 @@ class TestActivityCalendarViews:
         _login_as(client, director_id)
         response = client.get('/director/calendar')
         assert response.status_code == 200
-        assert 'University activity calendar' in response.get_data(as_text=True)
+        assert 'University Activity Calendar' in response.get_data(as_text=True)
 
 
 class TestSecurityAuditRegressions:

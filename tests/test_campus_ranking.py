@@ -52,8 +52,9 @@ def test_director_routes_reuse_scoped_deduplicated_goals_without_sex_queries(app
         response = client.get(path)
         assert response.status_code == 200
         body = response.get_data(as_text=True)
-        assert 'Top-Performing Campus' in body and 'goal-campus-ranking' in body
-        assert '100.0% · 1 of 1 Goals Achieved' in body
+        assert ('Worst Performing Campus' if path == '/director_dash' else 'Top-Performing Campus') in body
+        assert 'goal-campus-ranking' in body
+        assert ('50.0% · 1 of 2 Goals Achieved' if path == '/director_dash' else '100.0% · 1 of 1 Goals Achieved') in body
         assert 'Participation by Recorded Sex' not in body
     forbidden.assert_not_called()
     monkeypatch.undo()
@@ -83,7 +84,7 @@ def test_coordinator_still_gets_participation_and_director_empty_preview_states(
     assert 'No approved campus targets for this year.' in body
     target(campus=1)
     body = client.get('/director_dash').get_data(as_text=True)
-    assert 'No Goals Achieved Yet' in body
+    assert 'Worst Performing Campus' in body and '0.0% · 0 of 1 Goals Achieved' in body
     preview = client.get('/director_dash?sample=1').get_data(as_text=True)
-    assert '3 Campuses Tied' in preview and 'Annual Goals Achieved · Sample Data' in preview
-    assert 'No Goals Achieved Yet' in client.get('/director_dash').get_data(as_text=True)
+    assert '4 Campuses Tied' in preview and 'Lowest Annual Goal-Achievement Rate · Sample Data' in preview
+    assert 'Worst Performing Campus' in client.get('/director_dash').get_data(as_text=True)
