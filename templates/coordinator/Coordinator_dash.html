@@ -9,7 +9,7 @@
 <div class="dashboard-overview">
   <header class="page-heading">
     <div>
-      <h1>{{ campus_name }} campus overview</h1>
+      <h1>{{ campus_name }} Campus Overview</h1>
       <p>Track campus goals, complete participation records, and prepare activities.</p>
     </div>
     <div class="panel__actions">
@@ -22,39 +22,30 @@
         class="btn btn--outline"
         data-tour-id="analytics"
         href="{{ url_for('coordinator.analytics', start_date=period.start, end_date=period.end, sample=1 if annual_plan.sample else none, goal_year=annual_plan.year) }}"
-      >Analytics and reports</a>
+      >Analytics and Reports</a>
     </div>
   </header>
-  {{ annual_plan_summary(annual_plan, campus_name ~ ' annual-plan achievement') }}
+  {{ annual_plan_summary(annual_plan, campus_name ~ ' Annual-Plan Achievement') }}
   <div class="coordinator-briefing">
   <div data-tour-id="attendance">
     {{ findings(attention_items, 'coordinator.analytics', {'start_date': period.start, 'end_date': period.end}, pending_cancellations=pending_cancellations, scope='Attendance work across all dates; outcomes ' ~ period.label, landing=true, pagination=attention_pagination) }}
   </div>
-  <section class="upcoming-overview">
-    <h2>Upcoming activities</h2>
-    <ul class="attention-list">
-      {% for event in next_events %}
-        <li>
-          <div><strong>{{ event.title }}</strong>
-            {% set registration_count = event.registrations|rejectattr('status', 'equalto', 'cancelled')|list|length %}
-            <p>{{ event.date.strftime('%b %d, %Y at %H:%M') }} · {{ registration_count }} {{ 'registration' if registration_count == 1 else 'registrations' }} · {% if event.slots > 0 %}{{ event.slots_remaining() }} of {{ event.slots }} slots remaining{% else %}No slot limit{% endif %}</p>
-          </div>
-          <a class="btn btn--outline" href="{{ url_for('coordinator.edit_activity', event_id=event.id) }}">Manage<span class="sr-only"> {{ event.title }}</span></a>
-        </li>
-      {% else %}<li>No upcoming activities. Use Create Activity to schedule one.</li>{% endfor %}
-    </ul>
+  <section class="dashboard-calendar" id="activity-calendar" aria-labelledby="activity-calendar-title">
+    <h2 id="activity-calendar-title">Activity Calendar</h2>
+    {% include 'partials/campus_calendar.html' %}
+    <a class="btn btn--outline" href="{{ url_for('coordinator.activity_calendar', year=calendar_year, month=calendar_number) }}">Open Full Calendar</a>
   </section>
   </div>
   <section class="dashboard-evidence" data-tour-id="target-progress">
-    {{ performance_metrics(performance, period, deltas, 'coordinator.coordinator_dash', {'status': selected_status, 'category': selected_category, 'start_date': start_date, 'end_date': end_date, 'workspace': request.args.get('workspace', '')}, true) }}
+    {{ performance_metrics(performance, period, deltas, 'coordinator.coordinator_dash', {'status': selected_status, 'category': selected_category, 'start_date': start_date, 'end_date': end_date, 'workspace': request.args.get('workspace', ''), 'calendar_year': calendar_year, 'calendar_month': calendar_number}, true, show_period_label=false) }}
   </section>
-  <details class="secondary-workspace" id="activity-workspace"{{ ' open' if request.args.get('workspace') == '1' or selected_status != 'upcoming' or selected_category or start_date or end_date }}>
-    <summary data-tour-id="activity-workspace">Manage activities <span>{{ events|length }} in workspace</span></summary>
+  <section class="activity-workspace" id="activity-workspace" aria-labelledby="activity-workspace-title">
+    <header class="attention-heading" data-tour-id="activity-workspace"><h2 id="activity-workspace-title">Manage Activities</h2><span>{{ events|length }} in Workspace</span></header>
     <div class="workspace-content">
-  <section class="panel" data-tour-id="filters"><header class="panel__header"><div><div class="heading-with-tip"><h3>Activity filters</h3>{{ info_tip('Activity filters', 'These filters affect this workspace only. Participation outcomes use the separate performance period.') }}</div><small>Default view shows upcoming activities.</small></div></header><form class="filter-row" method="get"><input type="hidden" name="workspace" value="1"><input type="hidden" name="period" value="{{ period.value }}"><label class="field">Status<select class="select" name="status">{% for value in ['upcoming', 'completed', 'cancelled', 'all'] %}<option
+  <section class="panel" data-tour-id="filters"><header class="panel__header"><div><div class="heading-with-tip"><h3>Activity Filters</h3>{{ info_tip('Activity Filters', 'These filters affect this workspace only. Performance overview uses its own reporting period, and the calendar has separate month controls.') }}</div><small>Default view shows upcoming activities.</small></div></header><form class="filter-row" method="get"><input type="hidden" name="workspace" value="1"><input type="hidden" name="period" value="{{ period.value }}"><input type="hidden" name="calendar_year" value="{{ calendar_year }}"><input type="hidden" name="calendar_month" value="{{ calendar_number }}"><label class="field">Status<select class="select" name="status">{% for value in ['upcoming', 'completed', 'cancelled', 'all'] %}<option
   value="{{ value }}"
   {{ 'selected' if selected_status == value }}
->{{ value|title }}</option>{% endfor %}</select></label><label class="field">Category<select class="select" name="category"><option value="">All categories</option>{% for value in categories %}<option
+>{{ value|title }}</option>{% endfor %}</select></label><label class="field">Category<select class="select" name="category"><option value="">All Categories</option>{% for value in categories %}<option
   value="{{ value }}"
   {{ 'selected' if selected_category == value }}
 >{{ value }}</option>{% endfor %}</select></label><label class="field">From<input
@@ -67,32 +58,32 @@
   type="date"
   name="end_date"
   value="{{ end_date }}"
-></label><button class="btn btn--primary" type="submit">Apply filters</button><a
+></label><button class="btn btn--primary" type="submit">Apply Filters</button><a
   class="btn btn--ghost"
-  href="{{ url_for('coordinator.coordinator_dash', period=period.value) }}"
+  href="{{ url_for('coordinator.coordinator_dash', period=period.value, calendar_year=calendar_year, calendar_month=calendar_number) }}#activity-workspace"
 >Clear</a></form></section>
   <div class="content-grid">
     <section class="panel">
       <header class="panel__header">
         <div class="heading-with-tip">
-          <h2>Campus activities</h2>
-          {{ info_tip('Campus activities', 'The current filtered list of activities owned by your campus. Use the available controls to manage their operational records.') }}
+          <h2>Campus Activities</h2>
+          {{ info_tip('Campus Activities', 'The current filtered list of activities owned by your campus. Use the available controls to manage their operational records.') }}
         </div>
         <div class="panel__actions">
           <a
             class="btn btn--sm {{ 'btn--primary' if selected_status == 'upcoming' else 'btn--ghost' }}"
-            href="{{ url_for('coordinator.coordinator_dash', workspace=1, period=period.value, status='upcoming', category=selected_category, start_date=start_date, end_date=end_date) }}"
+            href="{{ url_for('coordinator.coordinator_dash', workspace=1, period=period.value, status='upcoming', category=selected_category, start_date=start_date, end_date=end_date, calendar_year=calendar_year, calendar_month=calendar_number) }}#activity-workspace"
           >Upcoming</a>
           <a
             class="btn btn--sm {{ 'btn--primary' if selected_status == 'completed' else 'btn--ghost' }}"
-            href="{{ url_for('coordinator.coordinator_dash', workspace=1, period=period.value, status='completed', category=selected_category, start_date=start_date, end_date=end_date) }}"
+            href="{{ url_for('coordinator.coordinator_dash', workspace=1, period=period.value, status='completed', category=selected_category, start_date=start_date, end_date=end_date, calendar_year=calendar_year, calendar_month=calendar_number) }}#activity-workspace"
           >Past</a>
         </div>
       </header>
       <div
         class="table-scroll table-scroll--record"
         tabindex="0"
-        aria-label="Campus activities table"
+        aria-label="Campus Activities Table"
       >
         <table class="data-table data-table--record workspace-table">
           <thead>
@@ -100,7 +91,7 @@
               <th scope="col">Activity</th>
               <th scope="col">Date</th>
               <th scope="col">Location</th>
-              <th scope="col">Slots remaining / capacity</th>
+              <th scope="col">Slots Remaining / Capacity</th>
               <th scope="col">Actions</th>
             </tr>
           </thead>
@@ -121,38 +112,38 @@
                     href="{{ url_for('coordinator.attendance', event_id=event.id) }}"
                   >Record Attendance<span class="sr-only"> for {{ event.title }}</span></a>
                   <details class="activity-controls">
-                    <summary>More actions<span class="sr-only"> for {{ event.title }}</span></summary>
+                    <summary>More Actions<span class="sr-only"> for {{ event.title }}</span></summary>
                     <div class="activity-controls__body">
                       <div class="activity-controls__secondary">
                         <a
                           class="btn btn--sm btn--ghost"
                           href="{{ url_for('coordinator.edit_activity', event_id=event.id) }}"
-                        >Edit activity</a>
+                        >Edit Activity</a>
                         <form
                           class="activity-milestone-upload"
                           method="post"
                           action="{{ url_for('coordinator.upload_milestone', event_id=event.id) }}"
                           enctype="multipart/form-data"
                         >
-                          <label class="field"><span>Milestone file</span><input
+                          <label class="field"><span>Milestone File</span><input
                             class="input"
                             type="file"
                             name="file"
                             required
                           ></label>
-                          <button class="btn btn--sm btn--outline" type="submit">Upload milestone</button>
+                          <button class="btn btn--sm btn--outline" type="submit">Upload Milestone</button>
                         </form>
                         <details class="event-announcement">
-                          <summary>Publish announcement</summary>
+                          <summary>Publish Announcement</summary>
                           <form
                             method="post"
                             action="{{ url_for('coordinator.publish_announcement', event_id=event.id) }}"
                           >
                             <label class="field">
                               Type<select name="announcement_type" required>
-                              <option value="event_update">Event update</option>
-                              <option value="last_call">Last call</option>
-                              <option value="cancelled_postponed">Cancelled or postponed</option>
+                              <option value="event_update">Event Update</option>
+                              <option value="last_call">Last Call</option>
+                              <option value="cancelled_postponed">Cancelled or Postponed</option>
                               </select>
                             </label>
                             <label class="field">
@@ -163,13 +154,13 @@
                         </details>
                       </div>
                       <div class="activity-controls__danger">
-                        <p><strong>Remove activity</strong><small>Permanently deletes the activity and cancels its registrations.</small></p>
+                        <p><strong>Remove Activity</strong><small>Permanently deletes the activity and cancels its registrations.</small></p>
                         <form
                           method="post"
                           action="{{ url_for('coordinator.delete_activity', event_id=event.id) }}"
                           onsubmit="return confirm({{ ('Remove ' ~ event.title ~ '? This permanently deletes the activity and cancels all registrations.')|tojson }});"
                         >
-                          <button class="btn btn--sm btn--danger" type="submit">Remove activity</button>
+                          <button class="btn btn--sm btn--danger" type="submit">Remove Activity</button>
                         </form>
                       </div>
                     </div>
@@ -190,8 +181,8 @@
     <aside class="stack">
       <section class="panel">
         <div class="heading-with-tip">
-          <h2>Recent registrations</h2>
-          {{ info_tip('Recent registrations', 'The latest activity sign-ups recorded for this campus. A registration does not confirm attendance.') }}
+          <h2>Recent Registrations</h2>
+          {{ info_tip('Recent Registrations', 'The latest activity sign-ups recorded for this campus. A registration does not confirm attendance.') }}
         </div>
         {% for reg in recent_activities %}
           <p>
@@ -206,7 +197,6 @@
     </aside>
   </div>
     </div>
-  </details>
-  <a class="btn btn--outline" href="{{ url_for('coordinator.activity_calendar') }}">Activity calendar</a>
+  </section>
 </div>
 {% endblock %}

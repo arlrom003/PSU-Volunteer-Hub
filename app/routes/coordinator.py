@@ -183,6 +183,36 @@ def _parse_event_schedule(form):
     return (start, end, deadline), None
 
 
+def _campus_calendar(campus_id, year=None, month=None, dashboard=False):
+    now = datetime.now()
+    year, month = year or now.year, month or now.month
+    if not 1 <= year <= 9999 or not 1 <= month <= 12:
+        year, month = now.year, now.month
+    events = Event.query.filter_by(campus_id=campus_id).filter(
+        db.extract('year', Event.date) == year,
+        db.extract('month', Event.date) == month).order_by(Event.date, Event.id).all()
+    by_day = {}
+    for event in events:
+        by_day.setdefault(event.date.day, []).append(event)
+    previous = ((year - 1, 12) if month == 1 else (year, month - 1)) if (year, month) != (1, 1) else None
+    following = ((year + 1, 1) if month == 12 else (year, month + 1)) if (year, month) != (9999, 12) else None
+
+    def month_url(value):
+        if value is None:
+            return None
+        query = request.args.to_dict(flat=False) if dashboard else {}
+        query.update({'calendar_year' if dashboard else 'year': value[0],
+                      'calendar_month' if dashboard else 'month': value[1]})
+        if dashboard:
+            query['_anchor'] = 'activity-calendar'
+        return url_for('coordinator.coordinator_dash' if dashboard else 'coordinator.activity_calendar', **query)
+
+    return dict(calendar_weeks=Calendar(firstweekday=0).monthdayscalendar(year, month),
+                calendar_events=by_day, calendar_month=datetime(year, month, 1).strftime('%B %Y'),
+                calendar_year=year, calendar_number=month,
+                previous_calendar_url=month_url(previous), next_calendar_url=month_url(following))
+
+
 @coordinator_bp.route('/coordinator_dash')
 @login_required
 @role_required('coordinator')
@@ -227,8 +257,8 @@ def coordinator_dash():
             except ValueError:
                 flash('Use valid dates when filtering activities.', 'error')
     events = events.order_by(Event.date.asc() if status == 'upcoming' else Event.date.desc()).all()
-    next_events = Event.query.filter(Event.campus_id == campus_id,
-        Event.date >= datetime.now()).order_by(Event.date, Event.id).limit(3).all()
+    calendar = _campus_calendar(campus_id, request.args.get('calendar_year', type=int),
+                                request.args.get('calendar_month', type=int), dashboard=True)
     pending_cancellations = CancellationRequest.query.join(Registration).join(Event).filter(
         Event.campus_id == campus_id,
         CancellationRequest.status == 'pending').count()
@@ -241,7 +271,7 @@ def coordinator_dash():
     evidence['annual_plan'] = annual_plan_summary(datetime.now().year, campus_id)
     return render_template('coordinator/Coordinator_dash.html',
                             **evidence,
-                            next_events=next_events,
+                            **calendar,
                             events=events,
                             recent_activities=recent_activities,
                             selected_status=status,
@@ -255,24 +285,10 @@ def coordinator_dash():
 @login_required
 @role_required('coordinator')
 def activity_calendar():
-    now = datetime.now()
-    year = request.args.get('year', now.year, type=int) or now.year
-    month = request.args.get('month', now.month, type=int) or now.month
-    if not 1 <= month <= 12:
-        year, month = now.year, now.month
-    events = Event.query.filter_by(campus_id=current_user.campus_id).filter(
-        db.extract('year', Event.date) == year,
-        db.extract('month', Event.date) == month).order_by(Event.date).all()
-    by_day = {}
-    for event in events:
-        by_day.setdefault(event.date.day, []).append(event)
-    previous = (year - 1, 12) if month == 1 else (year, month - 1)
-    following = (year + 1, 1) if month == 12 else (year, month + 1)
     return render_template('coordinator/activity_calendar.html',
-                           calendar_weeks=Calendar(firstweekday=0).monthdayscalendar(year, month),
-                           calendar_events=by_day,
-                           calendar_month=datetime(year, month, 1).strftime('%B %Y'),
-                           previous_calendar=previous, next_calendar=following)
+                           **_campus_calendar(_coordinator_campus_id(),
+                                              request.args.get('year', type=int),
+                                              request.args.get('month', type=int)))
 
 
 @coordinator_bp.route('/coordinator/cancellation-requests', methods=['GET', 'POST'])

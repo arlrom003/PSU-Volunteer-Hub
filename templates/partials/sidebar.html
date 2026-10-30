@@ -58,7 +58,7 @@
         class="navlink {{ 'navlink--active' if endpoint == 'coordinator.cancellation_requests' }}"
         href="{{ url_for('coordinator.cancellation_requests') }}"
         data-tour-id="cancellations"
-      ><span class="material-symbols-outlined" aria-hidden="true">event_busy</span>Cancellation requests</a>
+      ><span class="material-symbols-outlined" aria-hidden="true">event_busy</span>Cancellation Requests</a>
       <a
         class="navlink {{ 'navlink--active' if endpoint == 'coordinator.analytics' }}"
         href="{{ url_for('coordinator.analytics') }}"
@@ -123,10 +123,10 @@
       <button
         class="role-user__logout"
         type="submit"
-        aria-label="Log out"
+        aria-label="{{ 'Log Out' if reporting_page else 'Log out' }}"
       >
         <span class="material-symbols-outlined" aria-hidden="true">logout</span>
-        <span class="role-user__logout-label">Log out</span>
+        <span class="role-user__logout-label">{{ 'Log Out' if reporting_page else 'Log out' }}</span>
       </button>
     </form>
   </div>

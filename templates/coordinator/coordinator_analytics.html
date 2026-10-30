@@ -9,15 +9,15 @@
 {% block content %}
   <header class="page-heading">
     <div>
-      <h1>Campus analytics</h1>
+      <h1>Campus Analytics</h1>
       <p>Review participation and attendance outcomes for {{ campus_name }}.</p>
     </div>
     <a
       class="btn btn--outline"
       href="{{ url_for('coordinator.attendance') }}"
-    >Manage attendance</a>
+    >Manage Attendance</a>
   </header>
-  {{ annual_plan_summary(annual_plan, campus_name ~ ' annual-plan achievement') }}
+  {{ annual_plan_summary(annual_plan, campus_name ~ ' Annual-Plan Achievement') }}
   {{ period_control(period, 'coordinator.analytics', report_query) }}
   <section
     class="panel dashboard-filters"
@@ -25,25 +25,25 @@
   >
     <div class="heading-with-tip">
       <h2 id="filter-heading">Filters and Reports</h2>
-      {{ info_tip('Report filters', 'Activity name, dates, and category scope the KPI strip, comparison charts, engagement trend, and filtered activity report. Forecast and attendance snapshot have their own labelled campus scope.') }}
+      {{ info_tip('Report Filters', 'Activity name, dates, and category scope the KPI strip, comparison charts, engagement trend, and filtered activity report. Forecast and attendance snapshot have their own labelled campus scope.') }}
     </div>
     <form class="filter-row" method="get">
       {% if request.args.get('event_id') %}<input type="hidden" name="event_id" value="{{ request.args.get('event_id') }}">{% endif %}
-      <label class="field">Activity name
+      <label class="field">Activity Name
         <input type="search" name="activity_name" autocomplete="off"
           value="{{ request.args.get('activity_name', '') }}"
           aria-describedby="activity-name-help">
         <small id="activity-name-help">Matches any part of the activity title, ignoring case.</small>
       </label>
       <label class="field">
-        Start date<input
+        Start Date<input
   type="date"
   name="start_date"
   value="{{ period.start }}"
 >
       </label>
       <label class="field">
-        End date<input
+        End Date<input
   type="date"
   name="end_date"
   value="{{ period.end }}"
@@ -52,7 +52,7 @@
       <label class="field">
         Category
         <select name="category">
-          <option value="">All categories</option>
+          <option value="">All Categories</option>
           {% for category in categories %}
             <option
               value="{{ category }}"
@@ -62,7 +62,7 @@
           {% endfor %}
         </select>
       </label>
-      <label class="field">Attention<select name="attention"><option value="">All activity records</option>{% for key, label in attention_labels.items() %}<option value="{{ key }}"{{ ' selected' if request.args.get('attention') == key }}>{{ label }}</option>{% endfor %}</select></label>
+      <label class="field">Attention<select name="attention"><option value="">All Activity Records</option>{% for key, label in attention_labels.items() %}<option value="{{ key }}"{{ ' selected' if request.args.get('attention') == key }}>{{ label }}</option>{% endfor %}</select></label>
       <button class="btn btn--primary" type="submit">Apply Filters</button>
       <a
         class="btn btn--ghost"
@@ -82,7 +82,7 @@
   </section>
   {{ findings(attention_items, 'coordinator.analytics', report_query) }}
   {{ performance_metrics(performance, period, deltas) }}
-  {% if request.args.get('attention') %}<p class="scope-note">Showing: {{ attention_labels[request.args.get('attention')] }}. <a href="{{ url_for('coordinator.analytics', **dict(report_query, attention='')) }}">Show all activity records in this scope</a></p>{% endif %}
+  {% if request.args.get('attention') %}<p class="scope-note">Showing: {{ attention_labels[request.args.get('attention')] }}. <a href="{{ url_for('coordinator.analytics', **dict(report_query, attention='')) }}">Show All Activity Records in This Scope</a></p>{% endif %}
   <details class="analytics-disclosure" id="participation-breakdowns">
     <summary><span>Participation Breakdowns</span><small>Activity categories, participant types, and monthly or weekly participation trends.</small></summary>
     <div class="analytics-disclosure__content">
@@ -91,7 +91,7 @@
     {{ chart('Participant Type', 'Registrations linked to PSU accounts compared with external community registrations without a PSU account.', 'Selected campus report scope', 'campusComposition', {'labels': ['PSU', 'External'], 'values': [report_summary.total_psu, report_summary.total_external]}, 'donut') }}
   </div>
   <section class="panel">
-    {{ heading('Registrations and attendance', 'Activity-date periods comparing non-cancelled registrations with present attendance for the selected campus report filters.', 'Select a monthly or weekly view. Incomplete attendance remains provisional.') }}
+    {{ heading('Registrations and Attendance', 'Activity-date periods comparing non-cancelled registrations with present attendance for the selected campus report filters.', 'Select a monthly or weekly view. Incomplete attendance remains provisional.') }}
     <label class="field field--inline">
       View<select
   data-chart-switch="engagementChart"
@@ -106,13 +106,13 @@
       class="chart"
       id="engagementChart"
       role="img"
-      aria-label="Filtered campus engagement trend"
+      aria-label="Filtered Campus Engagement Trend"
       aria-describedby="engagement-values-hint"
     ><p>Detailed values are available below. Charts require JavaScript.</p></div>
     <details class="chart-fallback">
-      <summary>View monthly and weekly values</summary>
+      <summary>View Monthly and Weekly Values</summary>
       {% for period, data in [('Monthly', dashboard_data.monthly), ('Weekly', dashboard_data.weekly)] %}
-        <h3>{{ period }}</h3><ul class="chart-values">{% for label in data.labels %}<li><span>{{ label }}</span><span>{{ data.primary[loop.index0] }} registered / {{ data.secondary[loop.index0] }} attended</span></li>{% else %}<li>No matching engagement data.</li>{% endfor %}</ul>
+        <h3>{{ period }}</h3><ul class="chart-values">{% for label in data.labels %}<li><span>{{ label }}</span><span>{{ data.primary[loop.index0] }} Registered / {{ data.secondary[loop.index0] }} Attended</span></li>{% else %}<li>No matching engagement data.</li>{% endfor %}</ul>
       {% endfor %}
     </details>
     <script id="campusEngagementData" type="application/json">{{ {'monthly': dashboard_data.monthly, 'weekly': dashboard_data.weekly}|tojson }}</script>
@@ -124,8 +124,8 @@
     <header class="panel__header">
       <div>
         <div class="heading-with-tip">
-          <h2>Activity attendance rates</h2>
-          {{ info_tip('Activity performance', 'Registrations, verified attendance, and attendance rates for campus activities. Rates require fully recorded attendance.') }}
+          <h2>Activity Attendance Rates</h2>
+          {{ info_tip('Activity Performance', 'Registrations, verified attendance, and attendance rates for campus activities. Rates require fully recorded attendance.') }}
         </div>
         <small>Registrations and attendance; rates require fully recorded attendance.</small>
       </div>
@@ -134,7 +134,7 @@
     <div
       class="table-scroll table-scroll--report"
       tabindex="0"
-      aria-label="Activity performance table"
+      aria-label="Activity Performance Table"
       aria-describedby="activity-performance-scroll-hint"
     >
       <table class="data-table data-table--report">
@@ -144,7 +144,7 @@
             <th scope="col">Category</th>
             <th scope="col">Registrations</th>
             <th scope="col">Attended</th>
-            <th scope="col">Attendance rate</th>
+            <th scope="col">Attendance Rate</th>
           </tr>
         </thead>
         <tbody>
@@ -154,7 +154,7 @@
               <td>{{ activity.category }}</td>
               <td>{{ activity.registrations }}</td>
               <td>{{ activity.attended }}</td>
-              <td>{% if activity.attendance_complete and activity.registrations %}{{ (activity.outcome_attended / activity.registrations * 100)|round(1) }}%{% else %}Not available<small>{{ 'No registrations' if activity.attendance_complete else 'Attendance not complete' }}</small>{% endif %}</td>
+              <td>{% if activity.attendance_complete and activity.registrations %}{{ (activity.outcome_attended / activity.registrations * 100)|round(1) }}%{% else %}Not Available<small>{{ 'No Registrations' if activity.attendance_complete else 'Attendance Not Complete' }}</small>{% endif %}</td>
             </tr>
           {% else %}
             <tr>
@@ -179,7 +179,7 @@
         <div>
           <div class="heading-with-tip">
             <h2>Event Readiness Forecast</h2>
-            {{ info_tip('Event readiness forecast', 'Predicted attendance from prior campus event outcomes. The forecast uses campus history independently of the report date and category filters.') }}
+            {{ info_tip('Event Readiness Forecast', 'Predicted attendance from prior campus event outcomes. The forecast uses campus history independently of the report date and category filters.') }}
           </div>
           <small>Campus history; independent of the report filters</small>
         </div>
@@ -191,7 +191,7 @@
             <header>
               <strong>{{ item.event.title }}</strong><span>{{ pct }}%</span>
             </header>
-            <progress value="{{ pct }}" max="100" aria-label="Predicted attendance for {{ item.event.title }}">{{ pct }}%</progress>
+            <progress value="{{ pct }}" max="100" aria-label="Predicted Attendance for {{ item.event.title }}">{{ pct }}%</progress>
           </article>
         {% else %}
           <div class="empty-state">Not enough past event data to forecast turnout.</div>
@@ -203,7 +203,7 @@
         <div>
           <div class="heading-with-tip">
             <h2>Attendance Snapshot</h2>
-            {{ info_tip('Attendance snapshot', 'Recent campus attendance results across all report dates and categories.') }}
+            {{ info_tip('Attendance Snapshot', 'Recent campus attendance results across all report dates and categories.') }}
           </div>
           <small>Recent campus activities across all report dates and categories</small>
         </div>
@@ -212,7 +212,7 @@
       <div
         class="table-scroll table-scroll--report"
         tabindex="0"
-        aria-label="Campus attendance snapshot table"
+        aria-label="Campus Attendance Snapshot Table"
         aria-describedby="attendance-snapshot-scroll-hint"
       >
         <table class="data-table data-table--report data-table--report-compact">
@@ -259,7 +259,7 @@
     <div
       class="table-scroll table-scroll--report"
       tabindex="0"
-      aria-label="Filtered campus activity report table"
+      aria-label="Filtered Campus Activity Report Table"
       aria-describedby="filtered-campus-report-scroll-hint"
     >
       <table class="data-table data-table--report data-table--report-wide">
@@ -273,9 +273,9 @@
             <th scope="col">External</th>
             <th scope="col">Attended</th>
             <th scope="col">Completed</th>
-            <th scope="col">Attendance state</th>
-            <th scope="col">Participant target</th>
-            <th scope="col">Next action</th>
+            <th scope="col">Attendance State</th>
+            <th scope="col">Participant Target</th>
+            <th scope="col">Next Action</th>
           </tr>
         </thead>
         <tbody>
@@ -289,9 +289,9 @@
               <td>{{ row.external_registrations }}</td>
               <td>{{ row.attended }}</td>
               <td>{{ row.completed }}</td>
-              <td>{% if not row.ended %}Upcoming or in progress{% elif row.attendance_complete %}Fully recorded{% else %}{{ row.missing_attendance }} missing; {{ row.unconfirmed_present }} awaiting completion{% endif %}</td>
-              <td>{% if row.target_participants and row.target_participants > 0 %}{{ row.outcome_attended }} / {{ row.target_participants }}<small>{{ 'Provisional until attendance is complete' if not row.attendance_complete else 'Target reached' if row.outcome_attended >= row.target_participants else 'Target not reached' }}</small>{% else %}Not set{% endif %}</td>
-              <td><a class="btn btn--outline" href="{{ url_for('coordinator.attendance', event_id=row.event_id) }}">{{ 'Complete attendance' if row.ended and not row.attendance_complete else 'Review attendance' }}<span class="sr-only"> for {{ row.title }}</span></a></td>
+              <td>{% if not row.ended %}Upcoming or in Progress{% elif row.attendance_complete %}Fully Recorded{% else %}{{ row.missing_attendance }} Missing; {{ row.unconfirmed_present }} Awaiting Completion{% endif %}</td>
+              <td>{% if row.target_participants and row.target_participants > 0 %}{{ row.outcome_attended }} / {{ row.target_participants }}<small>{{ 'Provisional until Attendance Is Complete' if not row.attendance_complete else 'Target Reached' if row.outcome_attended >= row.target_participants else 'Target Not Reached' }}</small>{% else %}Not Set{% endif %}</td>
+              <td><a class="btn btn--outline" href="{{ url_for('coordinator.attendance', event_id=row.event_id) }}">{{ 'Complete Attendance' if row.ended and not row.attendance_complete else 'Review Attendance' }}<span class="sr-only"> for {{ row.title }}</span></a></td>
             </tr>
           {% else %}
             <tr>

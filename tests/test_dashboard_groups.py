@@ -26,13 +26,13 @@ def test_analytics_groups_hide_details_but_keep_the_overview(app, client, role, 
     for group in groups:
         assert 'open' not in group.attrs
         assert not group.all('details', **{'class': 'secondary-workspace'})
-        assert 'Participation outcomes' not in group.text
+        assert 'Participation Outcomes' not in group.text
         assert 'Apply Filters' not in group.text
         assert 'Export CSV' not in group.text
     assert groups[0].one('div', id='engagementChart')
     assert groups[1].one('section', id='decision-records')
     assert 'How these numbers are counted' not in page.text
-    assert 'Attendance rate' in page.text
+    assert 'Attendance Rate' in page.text
 
 
 @pytest.mark.parametrize('path,query', [
@@ -75,7 +75,7 @@ def test_campus_values_are_readable_without_javascript(app, primary, secondary):
     page = parse_html(markup)
     table = page.one('table', **{'class': 'data-table campus-chart-values'})
     assert [cell.text for cell in table.one('thead').all('th')] == [
-        'Campus', 'Registrations', 'Verified attendance']
+        'Campus', 'Registrations', 'Verified Attendance']
     if primary:
         assert [int(cell.text) for cell in table.one('tbody').all('td')] == [primary[0], secondary[0]]
     else:
@@ -90,7 +90,7 @@ def test_report_pagination_keeps_scope_and_targets_the_expanded_report(app, clie
     _login_as(client, _create_user(app, role='director', campus_id=1))
     page = parse_html(client.get(
         '/analytics?period=all&activity_name=Grouped&campus=1').get_data(as_text=True))
-    links = page.one('nav', **{'aria-label': 'Live activity report pages'}).all('a')
+    links = page.one('nav', **{'aria-label': 'Live Activity Report Pages'}).all('a')
     for link in links:
         url = urlsplit(link.attrs['href'])
         query = parse_qs(url.query)

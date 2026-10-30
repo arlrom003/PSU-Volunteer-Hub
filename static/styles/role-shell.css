@@ -398,6 +398,11 @@ body.sidebar-open {
   text-transform: uppercase;
 }
 
+.reporting-page :is(.data-table th, .metric-card small, .summary-stat small, .summary-strip > article small, .flash__label) {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 .data-table tr:last-child td {
   border-bottom: 0;
 }
@@ -1313,11 +1318,19 @@ body:has(.activity-page) .flash--success { background: var(--primary); }
 .dashboard-overview .chart-panel { border: 0; padding: 0; background: transparent; margin-top: 24px; }
 .dashboard-overview .summary-strip { border: 0; padding-block: 12px; }
 .dashboard-overview .period-control > p { font-size: .875rem; }
-.upcoming-overview { margin-block: 24px; }
+.coordinator-briefing { display: grid; gap: 24px; margin-block: 24px; }
+.coordinator-briefing > * { min-width: 0; }
+.coordinator-briefing .attention-overview, .dashboard-calendar { height: 100%; margin: 0; }
+.coordinator-briefing h2 { margin: 0; }
+.dashboard-calendar { display: flex; flex-direction: column; gap: 12px; }
+.dashboard-calendar > .btn { align-self: flex-start; margin-top: auto; }
+.dashboard-calendar .calendar-nav { margin: 0; }
+.dashboard-calendar .empty-state { margin: 0; }
+.activity-workspace { margin-top: 24px; border-top: 1px solid var(--outline-variant); padding-top: 16px; }
+.activity-workspace > header > h2 { margin: 0; }
+#activity-calendar, #activity-workspace { scroll-margin-top: 6rem; }
 @media (min-width: 1200px) {
-  .coordinator-briefing { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 32px; }
-  .coordinator-briefing .attention-overview, .coordinator-briefing .upcoming-overview { margin-block: 20px 0; }
-  .coordinator-briefing .upcoming-overview > h2 { margin-top: 0; }
+  .coordinator-briefing { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; align-items: stretch; }
   .coordinator-briefing .attention-record, .coordinator-briefing .attention-list > li > div { flex-basis: 14rem; }
 }
 @media (max-width: 640px) {

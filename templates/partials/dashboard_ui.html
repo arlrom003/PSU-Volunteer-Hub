@@ -7,43 +7,44 @@
   </div></header>
 {%- endmacro %}
 
-{% macro annual_plan_summary(plan, title='Annual-plan achievement') -%}
+{% macro annual_plan_summary(plan, title='Annual-Plan Achievement') -%}
+  {% set action_style = 'btn--primary' if request.endpoint == 'coordinator.coordinator_dash' else 'btn--outline' %}
   <section class="goal-overview" aria-label="{{ title }}" data-tour-id="annual-goals">
-    <div class="goal-overview__scope"><h2>{{ title }}</h2><span>{{ plan.year }} · {{ plan.scope }} targets · Through {{ plan.cutoff }}</span></div>
-    {% if request.endpoint in ['director.director_dash', 'coordinator.coordinator_dash'] %}<form class="goal-year" method="get">{% for key, value in request.args.items(multi=true) if key != 'goal_year' %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}<label for="goal-year">Target year</label><input id="goal-year" class="input" type="number" name="goal_year" min="1900" max="2100" value="{{ plan.year }}" required><button class="btn btn--outline">Apply year</button></form>{% endif %}
-    {% if plan.sample %}<div class="goal-preview"><strong>Sample data</strong><span>Illustrative goals for design review.</span><a class="btn btn--outline" href="{{ url_for(request.endpoint, goal_year=plan.year) }}">Exit preview</a></div>{% endif %}
+    <div class="goal-overview__scope"><h2>{{ title }}</h2><span>{{ plan.year }} · {{ plan.scope }} Targets · Through {{ plan.cutoff }}</span></div>
+    {% if request.endpoint in ['director.director_dash', 'coordinator.coordinator_dash'] %}<form class="goal-year" method="get">{% for key, value in request.args.items(multi=true) if key != 'goal_year' %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}<label for="goal-year">Target Year</label><input id="goal-year" class="input" type="number" name="goal_year" min="1900" max="2100" value="{{ plan.year }}" required><button class="btn {{ action_style }}">Apply Year</button></form>{% endif %}
+    {% if plan.sample %}<div class="goal-preview"><strong>Sample Data</strong><span>Illustrative goals for design review.</span><a class="btn btn--outline" href="{{ url_for(request.endpoint, goal_year=plan.year) }}">Exit Preview</a></div>{% endif %}
     <div class="goal-overview__metrics">
       <a class="goal-hero" href="{{ plan.detail_url }}">
-        <span class="goal-hero__value{{ ' goal-hero__value--empty' if plan.rate is none }}">{{ (plan.rate|string ~ '%') if plan.rate is not none else 'Not available' }}</span>
-        <strong>Goals achieved</strong><span>{{ plan.met }} of {{ plan.total }} {{ 'sample' if plan.sample else 'approved' }} goals</span>
-        <span class="goal-hero__cue">View goal details</span>
+        <span class="goal-hero__value{{ ' goal-hero__value--empty' if plan.rate is none }}">{{ (plan.rate|string ~ '%') if plan.rate is not none else 'Not Available' }}</span>
+        <strong>Goals Achieved</strong><span>{{ plan.met }} of {{ plan.total }} {{ 'Sample' if plan.sample else 'Approved' }} Goals</span>
+        <span class="goal-hero__cue">View Goal Details</span>
       </a>
       <div class="goal-plan-pair">{% for kind, link in [('AOP', plan.aop_url), ('ASP', plan.asp_url)] %}
-        <a class="goal-plan" href="{{ link }}"><span>{{ kind }}</span><strong>{{ plan.plans[kind].met }} <small>/ {{ plan.plans[kind].total }}</small></strong><span>goals achieved</span></a>
+        <a class="goal-plan" href="{{ link }}"><span>{{ kind }}</span><strong>{{ plan.plans[kind].met }} <small>/ {{ plan.plans[kind].total }}</small></strong><span>Goals Achieved</span></a>
       {% endfor %}</div>
       {% if plan.campus_ranking is defined %}
       {% set ranking = plan.campus_ranking %}
       <details class="goal-participation goal-campus-ranking">
         <summary>
-          <span>Top-performing campus</span>
+          <span>Top-Performing Campus</span>
           {% if ranking.state == 'unavailable' %}
-            <strong>Not available</strong><span>No approved campus targets for this year.</span>
+            <strong>Not Available</strong><span>No approved campus targets for this year.</span>
           {% elif ranking.state == 'zero' %}
-            <strong>No goals achieved yet</strong><span>No campus has achieved a verified target yet.</span>
+            <strong>No Goals Achieved Yet</strong><span>No campus has achieved a verified target yet.</span>
           {% else %}
             {% set leader = ranking.leaders[0] %}
-            <strong>{{ leader.campus if ranking.leaders|length == 1 else (ranking.leaders|length|string ~ ' campuses tied') }}</strong>
-            <span>{{ leader.rate }}%{% if ranking.leaders|length == 1 %} · {{ leader.met }} of {{ leader.total }} goals achieved{% endif %}</span>
+            <strong>{{ leader.campus if ranking.leaders|length == 1 else (ranking.leaders|length|string ~ ' Campuses Tied') }}</strong>
+            <span>{{ leader.rate }}%{% if ranking.leaders|length == 1 %} · {{ leader.met }} of {{ leader.total }} Goals Achieved{% endif %}</span>
           {% endif %}
-          <span class="goal-participation__basis">Annual goals achieved{% if plan.sample %} · Sample data{% endif %}</span>
-          <span class="goal-hero__cue">View campus ranking</span>
+          <span class="goal-participation__basis">Annual Goals Achieved{% if plan.sample %} · Sample Data{% endif %}</span>
+          <span class="goal-hero__cue">View Campus Ranking</span>
         </summary>
         <div class="goal-participation__breakdown">
           <p>Each campus is assessed against its own approved targets. Pending evidence stays in the denominator.</p>
           <ul class="goal-ranking-list">
           {% for campus in ranking.rows %}
-            <li><strong>{{ campus.campus }}</strong><span>{{ campus.rate }}% · {{ campus.met }} of {{ campus.total }} goals achieved</span><span>{{ campus.pending }} awaiting evidence</span>
-              <a class="btn btn--outline" href="{{ campus.detail_url }}">View campus goals<span class="sr-only"> for {{ campus.campus }}</span></a>
+            <li><strong>{{ campus.campus }}</strong><span>{{ campus.rate }}% · {{ campus.met }} of {{ campus.total }} Goals Achieved</span><span>{{ campus.pending }} Awaiting Evidence</span>
+              <a class="btn btn--outline" href="{{ campus.detail_url }}">View Campus Goals<span class="sr-only"> for {{ campus.campus }}</span></a>
             </li>
           {% else %}<li>No campuses have approved targets in this year.</li>{% endfor %}
           </ul>
@@ -51,15 +52,15 @@
       </details>
       {% else %}
       {% set sex = plan.participation %}
-      <details class="goal-participation"><summary><span>Participation by recorded sex</span><strong>{{ 'Tie: ' if sex.tie }}{{ sex.leader }}</strong><span>{% if sex.share is not none %}{{ sex.share }}% · {{ sex.highest }} of {{ sex.total }}{% else %}No recorded responses{% endif %}</span><span class="goal-participation__basis">Actual verified attendance occurrences</span><span class="goal-hero__cue">View breakdown</span></summary>
-        <div class="goal-participation__breakdown"><p>Annual scope. Repeated attendance counts once per activity.</p><dl>{% for item in sex.counts %}<div><dt>{{ item.label }}</dt><dd>{{ item.count }}</dd></div>{% endfor %}</dl><p>Includes PSU and external participants. Not recorded remains in the denominator.</p></div>
+      <details class="goal-participation"><summary><span>Participation by Recorded Sex</span><strong>{{ 'Tie: ' if sex.tie }}{{ 'Not Available' if sex.leader == 'Not available' else sex.leader }}</strong><span>{% if sex.share is not none %}{{ sex.share }}% · {{ sex.highest }} of {{ sex.total }}{% else %}No Recorded Responses{% endif %}</span><span class="goal-participation__basis">Actual Verified Attendance Occurrences</span><span class="goal-hero__cue">View Breakdown</span></summary>
+        <div class="goal-participation__breakdown"><p>Annual scope. Repeated attendance counts once per activity.</p><dl>{% for item in sex.counts %}<div><dt>{{ 'Not Recorded' if item.label == 'Not recorded' else item.label }}</dt><dd>{{ item.count }}</dd></div>{% endfor %}</dl><p>Includes PSU and external participants. Not recorded remains in the denominator.</p></div>
       </details>
       {% endif %}
     </div>
-    <nav class="goal-overview__actions" aria-label="Annual goal workspaces">
-      {% if not plan.sample and current_user.role != 'admin' %}<a class="btn btn--outline" href="{{ plan.workspace_url }}">{{ 'Review goal proposals' if current_user.role == 'director' else 'Campus goal proposals' }}{% if plan.proposal_count %} ({{ plan.proposal_count }}){% endif %}</a>{% endif %}
-      {% if current_user.role == 'director' %}<a class="btn btn--outline" href="{{ plan.detail_url }}#campus-results">Compare campus goals</a>{% endif %}
-      {% if not plan.sample %}<a class="btn btn--outline" href="{{ url_for(request.endpoint, goal_year=plan.year, sample=1) }}">Preview sample data</a>{% endif %}
+    <nav class="goal-overview__actions" aria-label="Annual Goal Workspaces">
+      {% if not plan.sample and current_user.role != 'admin' %}<a class="btn {{ action_style }}" href="{{ plan.workspace_url }}">{{ 'Review Goal Proposals' if current_user.role == 'director' else 'Campus Goal Proposals' }}{% if plan.proposal_count %} ({{ plan.proposal_count }}){% endif %}</a>{% endif %}
+      {% if current_user.role == 'director' %}<a class="btn btn--outline" href="{{ plan.detail_url }}#campus-results">Compare Campus Goals</a>{% endif %}
+      {% if not plan.sample %}<a class="btn {{ action_style }}" href="{{ url_for(request.endpoint, goal_year=plan.year, sample=1) }}">Preview Sample Data</a>{% endif %}
     </nav>
   </section>
 {%- endmacro %}
@@ -68,11 +69,11 @@
   <article class="summary-stat">
     <div class="metric-label"><span>{{ label }}</span>{% if show_help %}{{ info_tip(label, explanation) }}{% endif %}</div>
     <strong class="metric-value">{{ value }}</strong>
-    {% if change is not none %}<small>{{ '+' if change > 0 }}{{ change }}{{ unit }} vs previous period</small>{% endif %}
+    {% if change is not none %}<small>{{ '+' if change > 0 }}{{ change }}{{ unit }} vs Previous Period</small>{% endif %}
   </article>
 {%- endmacro %}
 
-{% macro period_control(period, endpoint, query={}, workspace=false) -%}
+{% macro period_control(period, endpoint, query={}, workspace=false, show_label=true) -%}
   <form class="period-control" method="get" action="{{ url_for(endpoint) }}">
     {% for key in ['sample', 'goal_year'] if key in request.args and key not in query %}<input type="hidden" name="{{ key }}" value="{{ request.args[key] }}">{% endfor %}
     {% for key, value in query.items() if key not in (['period', 'page'] if workspace else ['period', 'start_date', 'end_date', 'page']) %}
@@ -80,29 +81,29 @@
         {% for item in value %}<input type="hidden" name="{{ key }}" value="{{ item }}">{% endfor %}
       {% else %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}
     {% endfor %}
-    <label class="field">Performance period
+    <label class="field"><span{{ ' class=sr-only' if not show_label }}>Performance Period</span>
       <select class="select" name="period" required>
-        {% for value, label in [('this_month', 'This month to date'), ('last_month', 'Last month'), ('all', 'All dates')] %}
+        {% for value, label in [('this_month', 'This Month to Date'), ('last_month', 'Last Month'), ('all', 'All Dates')] %}
           <option value="{{ value }}"{{ ' selected' if period.value == value }}>{{ label }}</option>
         {% endfor %}
-        {% if period.value == 'custom' %}<option value="" selected disabled>Choose a preset period</option>{% endif %}
+        {% if period.value == 'custom' %}<option value="" selected disabled>Choose a Preset Period</option>{% endif %}
       </select>
     </label>
-    <button class="btn btn--outline" type="submit">Apply period</button>
+    <button class="btn btn--outline" type="submit">Apply Period</button>
     <p>{{ period.label }}</p>
   </form>
 {%- endmacro %}
 
-{% macro performance_metrics(performance, period, deltas, period_endpoint=none, period_query={}, workspace=false) -%}
+{% macro performance_metrics(performance, period, deltas, period_endpoint=none, period_query={}, workspace=false, show_period_label=true) -%}
   <section class="performance-overview" aria-label="Performance for {{ period.label }}">
-    <h2>{{ 'Performance overview' if period_endpoint else 'Participation outcomes' }}</h2>
-    {% if period_endpoint %}{{ period_control(period, period_endpoint, period_query, workspace) }}{% endif %}
+    <h2>{{ 'Performance Overview' if period_endpoint else 'Participation Outcomes' }}</h2>
+    {% if period_endpoint %}{{ period_control(period, period_endpoint, period_query, workspace, show_period_label) }}{% endif %}
     <div class="summary-strip">
       {{ metric('Activities', performance.activities, '', deltas.get('activities'), show_help=false) }}
       {{ metric('Registrations', performance.registrations, '', deltas.get('registrations'), show_help=false) }}
-      {{ metric('Verified attendance', performance.attended, '', deltas.get('attended'), show_help=false) }}
-      {{ metric('Attendance rate', (performance.rate ~ '%') if performance.rate is not none else 'Not available', '', deltas.get('rate'), ' pp', false) }}
-      {{ metric('Targets reached', (performance.targets_met ~ ' of ' ~ performance.targets_count) if performance.targets_count else 'Not available', '', show_help=false) }}
+      {{ metric('Verified Attendance', performance.attended, '', deltas.get('attended'), show_help=false) }}
+      {{ metric('Attendance Rate', (performance.rate ~ '%') if performance.rate is not none else 'Not Available', '', deltas.get('rate'), ' pp', false) }}
+      {{ metric('Targets Reached', (performance.targets_met ~ ' of ' ~ performance.targets_count) if performance.targets_count else 'Not Available', '', show_help=false) }}
     </div>
     <p class="scope-note">{% if performance.rate is not none %}Attendance rate: {{ performance.rate_attended }} present / {{ performance.rate_registrations }} registrations in fully recorded, ended activities.{% else %}Attendance rate is unavailable until ended activities have complete records and registrations.{% endif %}</p>
   </section>
@@ -114,37 +115,41 @@
   <li data-attention-event="{{ item.event_id }}">
     <div class="attention-record">
       <strong>{{ item.title }}</strong>
-      {% if director %}<span class="attention-campus">{{ item.campus or 'Unassigned campus' }}</span>{% endif %}
+      {% if director %}<span class="attention-campus">{{ item.campus or 'Unassigned Campus' }}</span>{% endif %}
       <p>{{ item.reasons|join('; ') }}.</p>
     </div>
     <a class="btn btn--outline" href="{{ url_for('coordinator.attendance', event_id=item.event_id) if item.is_pending and not director else url_for(endpoint, **row_query) ~ '#decision-records' }}">
-      {{ 'Complete attendance' if item.is_pending and not director else 'Review activity' }}<span class="sr-only"> for {{ item.title }}</span>
+      {{ 'Complete Attendance' if item.is_pending and not director else 'Review Activity' }}<span class="sr-only"> for {{ item.title }}</span>
     </a>
   </li>
 {%- endmacro %}
 
 {% macro findings(items, endpoint, query={}, director=false, pending_cancellations=0, scope='Selected reporting period', landing=false, pagination=none) -%}
   <section class="attention-overview" aria-labelledby="findings-title" data-tour-id="summary">
-    <header class="attention-heading"><h2 id="findings-title">Needs attention</h2>{% if items %}<span>{{ items|length }} {{ 'activity' if items|length == 1 else 'activities' }}</span>{% endif %}</header>
+    <header class="attention-heading"><h2 id="findings-title">Needs Attention</h2>{% if items %}<span>{{ items|length }} {{ 'Activity' if items|length == 1 else 'Activities' }}</span>{% endif %}</header>
     <p class="scope-note">{{ scope }}. The 75% attendance level is a review guide.</p>
     {% if pending_cancellations %}
-      <div class="cancellation-queue" data-tour-id="cancellations"><strong>{{ pending_cancellations }} {{ 'request awaits' if pending_cancellations == 1 else 'requests await' }} review</strong><a class="btn btn--outline" href="{{ url_for('coordinator.cancellation_requests') }}">Review requests</a></div>
+      <div class="cancellation-queue" data-tour-id="cancellations"><strong>{{ pending_cancellations }} {{ 'Request Awaits' if pending_cancellations == 1 else 'Requests Await' }} Review</strong><a class="btn btn--outline" href="{{ url_for('coordinator.cancellation_requests') }}">Review Requests</a></div>
     {% endif %}
     {% if items %}
       {% if pagination %}
-      <p class="attention-page-summary">Showing {{ pagination.start + 1 }}–{{ pagination.stop }} of {{ items|length }} {{ 'activity' if items|length == 1 else 'activities' }}</p>
+      <p class="attention-page-summary">Showing {{ pagination.start + 1 }}–{{ pagination.stop }} of {{ items|length }} {{ 'Activity' if items|length == 1 else 'Activities' }}</p>
       <ul class="attention-list">{% for item in items[pagination.start:pagination.stop] %}{{ attention_row(item, endpoint, query, director, landing) }}{% endfor %}</ul>
       {% if pagination.pages > 1 %}
       {% set page_query = request.args.to_dict(flat=false) %}
-      <nav class="pagination" aria-label="Needs attention pages">
-        {% if pagination.page > 1 %}<a class="btn btn--outline" href="{{ url_for('coordinator.coordinator_dash', **dict(page_query, attention_page=pagination.page - 1)) }}#findings-title">Previous</a>{% endif %}
-        {% for number in range(1, pagination.pages + 1) %}<a class="btn {{ 'btn--primary' if number == pagination.page else 'btn--outline' }}" href="{{ url_for('coordinator.coordinator_dash', **dict(page_query, attention_page=number)) }}#findings-title"{{ ' aria-current=page' if number == pagination.page }}>Page {{ number }}</a>{% endfor %}
-        {% if pagination.page < pagination.pages %}<a class="btn btn--outline" href="{{ url_for('coordinator.coordinator_dash', **dict(page_query, attention_page=pagination.page + 1)) }}#findings-title">Next</a>{% endif %}
+      <nav class="pagination attention-pagination" aria-label="Needs Attention Pages">
+        {% if pagination.page > 1 %}
+          <a class="attention-pagination__arrow" href="{{ url_for('coordinator.coordinator_dash', **dict(page_query, attention_page=pagination.page - 1)) }}#findings-title" aria-label="Previous Page"><span class="material-symbols-outlined" aria-hidden="true">chevron_left</span></a>
+        {% else %}<button class="attention-pagination__arrow" type="button" disabled aria-label="Previous Page"><span class="material-symbols-outlined" aria-hidden="true">chevron_left</span></button>{% endif %}
+        <a class="attention-pagination__page" href="{{ url_for('coordinator.coordinator_dash', **dict(page_query, attention_page=pagination.page)) }}#findings-title" aria-label="Page {{ pagination.page }}" aria-current="page">{{ pagination.page }}</a>
+        {% if pagination.page < pagination.pages %}
+          <a class="attention-pagination__arrow" href="{{ url_for('coordinator.coordinator_dash', **dict(page_query, attention_page=pagination.page + 1)) }}#findings-title" aria-label="Next Page"><span class="material-symbols-outlined" aria-hidden="true">chevron_right</span></a>
+        {% else %}<button class="attention-pagination__arrow" type="button" disabled aria-label="Next Page"><span class="material-symbols-outlined" aria-hidden="true">chevron_right</span></button>{% endif %}
       </nav>
       {% endif %}
       {% else %}
       <ul class="attention-list">{% for item in items[:3] %}{{ attention_row(item, endpoint, query, director, landing) }}{% endfor %}</ul>
-      {% if items|length > 3 %}<details class="attention-more"><summary>Show {{ items|length - 3 }} more {{ 'activity' if items|length == 4 else 'activities' }}</summary><ul class="attention-list">{% for item in items[3:] %}{{ attention_row(item, endpoint, query, director, landing) }}{% endfor %}</ul></details>{% endif %}
+      {% if items|length > 3 %}<details class="attention-more"><summary>Show {{ items|length - 3 }} More {{ 'Activity' if items|length == 4 else 'Activities' }}</summary><ul class="attention-list">{% for item in items[3:] %}{{ attention_row(item, endpoint, query, director, landing) }}{% endfor %}</ul></details>{% endif %}
       {% endif %}
     {% else %}<p>No activities need follow-up in this scope.</p>{% endif %}
   </section>
@@ -154,15 +159,15 @@
   <section class="panel chart-panel">
     {{ heading(title, explanation, context) }}
     {% if kind == 'grouped' %}<p class="scope-note">Registrations compared with recorded present attendance. Incomplete attendance remains provisional.</p>{% endif %}
-    <div id="{{ chart_id }}" class="chart" data-chart="{{ kind }}" data-source="{{ chart_id }}-data" role="img" aria-label="{{ title }} chart"><p>Detailed values are available below. Charts require JavaScript.</p></div>
+    <div id="{{ chart_id }}" class="chart" data-chart="{{ kind }}" data-source="{{ chart_id }}-data" role="img" aria-label="{{ title }} Chart"><p>Detailed values are available below. Charts require JavaScript.</p></div>
     <script id="{{ chart_id }}-data" type="application/json">{{ data|tojson }}</script>
-    <details class="chart-fallback"><summary>View {{ title|lower }} data</summary>
+    <details class="chart-fallback"><summary>View {{ title }} Data</summary>
       {% if kind == 'grouped' %}
       <p class="table-scroll__hint" id="{{ chart_id }}-values-hint">Swipe horizontally to view remaining columns.</p>
-      <div class="table-scroll" tabindex="0" role="region" aria-label="{{ title }} data" aria-describedby="{{ chart_id }}-values-hint">
+      <div class="table-scroll" tabindex="0" role="region" aria-label="{{ title }} Data" aria-describedby="{{ chart_id }}-values-hint">
         <table class="data-table campus-chart-values">
           <caption class="sr-only">{{ title }} · {{ context }}</caption>
-          <thead><tr><th scope="col">Campus</th><th scope="col">Registrations</th><th scope="col">Verified attendance</th></tr></thead>
+          <thead><tr><th scope="col">Campus</th><th scope="col">Registrations</th><th scope="col">Verified Attendance</th></tr></thead>
           <tbody>{% for label in data.labels %}<tr><th scope="row">{{ label }}</th><td>{{ data.primary[loop.index0] }}</td><td>{{ data.secondary[loop.index0] }}</td></tr>{% else %}<tr><td colspan="3">No records match this scope.</td></tr>{% endfor %}</tbody>
         </table>
       </div>

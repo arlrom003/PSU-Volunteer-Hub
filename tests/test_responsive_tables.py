@@ -59,12 +59,12 @@ def test_shared_styles_reflow_records_and_contain_reports():
 def test_activity_workspace_groups_secondary_and_destructive_actions():
     content = _template('coordinator/Coordinator_dash.html')
 
-    assert 'More actions<span class="sr-only"> for {{ event.title }}</span>' in content
-    assert 'Edit activity' in content
-    assert 'Upload milestone' in content
-    assert 'Publish announcement' in content
-    assert 'Remove activity' in content
-    assert content.index('Publish announcement') < content.index('Remove activity')
+    assert 'More Actions<span class="sr-only"> for {{ event.title }}</span>' in content
+    assert 'Edit Activity' in content
+    assert 'Upload Milestone' in content
+    assert 'Publish Announcement' in content
+    assert 'Remove Activity' in content
+    assert content.index('Publish Announcement') < content.index('Remove Activity')
 
 
 def test_director_campus_coverage_reflows_without_extra_tables():

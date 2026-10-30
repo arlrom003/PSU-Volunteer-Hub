@@ -45,7 +45,7 @@
       const counts = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
       traces = [
         { x: data.primary, name: 'Registrations', marker: { color: colors[0] } },
-        { x: data.secondary, name: 'Verified attendance', marker: { color: colors[1], pattern: { shape: '/' } } },
+        { x: data.secondary, name: 'Verified Attendance', marker: { color: colors[1], pattern: { shape: '/' } } },
       ].map((trace) => ({ ...trace, type: 'bar', orientation: 'h', y: data.labels,
         text: trace.x.map((value) => counts.format(value)), textposition: 'outside', cliponaxis: false,
         textfont: { color: '#111c2c', size: 13 },
@@ -54,7 +54,7 @@
         height: Math.max(340, data.labels.length * 76 + 140),
         margin: { t: 16, r: 48, b: 110, l: 90 },
         legend: { orientation: 'h', x: 0, y: -0.25, itemclick: false, itemdoubleclick: false },
-        xaxis: { title: { text: 'Participation count', standoff: 12 }, range: [0, Math.max(1, maximum * 1.2)],
+        xaxis: { title: { text: 'Participation Count', standoff: 12 }, range: [0, Math.max(1, maximum * 1.2)],
           tickformat: ',.0f', dtick: maximum <= 5 ? 1 : undefined,
           separatethousands: true, gridcolor: '#e5e7eb', automargin: true },
         yaxis: { type: 'category', autorange: 'reversed', automargin: true,

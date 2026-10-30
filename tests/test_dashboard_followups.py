@@ -31,7 +31,8 @@ def test_coordinator_pages_cover_each_followup_once(app, client, count):
     pending_activities(2, campus_id=2)
     _login_as(client, _create_user(app, role='coordinator', campus_id=1))
     seen = []
-    for number in range(1, max(1, (count + 4) // 5) + 1):
+    total_pages = max(1, (count + 4) // 5)
+    for number in range(1, total_pages + 1):
         response = client.get(f'/coordinator_dash?attention_page={number}')
         assert response.status_code == 200
         page = parse_html(response.get_data(as_text=True))
@@ -44,7 +45,17 @@ def test_coordinator_pages_cover_each_followup_once(app, client, count):
             assert f'Showing {(number - 1) * 5 + 1}–{min(number * 5, count)} of {count}' in page.text
         else:
             assert 'No activities need follow-up' in page.text
-        assert bool(page.all('nav', **{'aria-label': 'Needs attention pages'})) == (count > 5)
+        assert bool(page.all('nav', **{'aria-label': 'Needs Attention Pages'})) == (count > 5)
+        if count > 5:
+            nav = page.one('nav', **{'aria-label': 'Needs Attention Pages'})
+            current = nav.one('a', **{'class': 'attention-pagination__page'})
+            assert current.attrs['aria-label'] == f'Page {number}'
+            assert current.attrs['aria-current'] == 'page' and current.text == str(number)
+            assert bool(nav.all('a', **{'aria-label': 'Previous Page'})) == (number > 1)
+            assert bool(nav.all('a', **{'aria-label': 'Next Page'})) == (number < total_pages)
+            for label in ['Previous Page', 'Next Page']:
+                for disabled in nav.all('button', **{'aria-label': label}):
+                    assert 'disabled' in disabled.attrs
     assert set(seen) == set(ids) and len(seen) == len(set(seen))
 
 
@@ -63,9 +74,10 @@ def test_coordinator_page_validation_preserves_dashboard_filters(app, client, va
     _login_as(client, _create_user(app, role='coordinator', campus_id=1))
     query = f'?attention_page={value}&period=all&workspace=1&status=all&category=Environment&start_date=2020-01-01&goal_year=2026'
     page = parse_html(client.get('/coordinator_dash' + query).get_data(as_text=True))
-    navigation = page.one('nav', **{'aria-label': 'Needs attention pages'})
-    assert navigation.one('a', **{'aria-current': 'page'}).text == f'Page {expected}'
-    assert '1 request awaits review' in page.text
+    navigation = page.one('nav', **{'aria-label': 'Needs Attention Pages'})
+    assert navigation.one('a', **{'aria-current': 'page'}).text == str(expected)
+    assert navigation.one('a', **{'aria-current': 'page'}).attrs['aria-label'] == f'Page {expected}'
+    assert '1 Request Awaits Review' in page.text
     for link in navigation.all('a'):
         url = urlsplit(link.attrs['href'])
         scope = parse_qs(url.query)
@@ -76,17 +88,34 @@ def test_coordinator_page_validation_preserves_dashboard_filters(app, client, va
         assert 'page' not in scope
 
 
+def test_many_followup_pages_show_only_the_current_page_number(app, client):
+    pending_activities(60)
+    _login_as(client, _create_user(app, role='coordinator', campus_id=1))
+    page = parse_html(client.get('/coordinator_dash?attention_page=6&calendar_year=2026&calendar_month=10').get_data(as_text=True))
+    nav = page.one('nav', **{'aria-label': 'Needs Attention Pages'})
+    current = nav.one('a', **{'class': 'attention-pagination__page'})
+    assert current.attrs['aria-label'] == 'Page 6' and current.text == '6'
+    assert nav.one('a', **{'aria-label': 'Previous Page'})
+    assert nav.one('a', **{'aria-label': 'Next Page'})
+    for link in nav.all('a'):
+        query = parse_qs(urlsplit(link.attrs['href']).query)
+        assert query['calendar_year'] == ['2026'] and query['calendar_month'] == ['10']
+
+
 @pytest.mark.parametrize('role,path', [('director', '/director_dash'), ('coordinator', '/coordinator_dash')])
 def test_dashboard_period_and_metrics_share_one_overview(app, client, role, path):
     _login_as(client, _create_user(app, role=role, campus_id=1))
     page = parse_html(client.get(path + '?period=all').get_data(as_text=True))
     overview = page.one('section', **{'class': 'performance-overview'})
-    assert overview.one('h2').text == 'Performance overview'
+    assert overview.one('h2').text == 'Performance Overview'
     assert overview.one('select', name='period')
-    assert overview.one('button', type='submit').text == 'Apply period'
+    assert overview.one('button', type='submit').text == 'Apply Period'
     assert overview.one('div', **{'class': 'summary-strip'})
-    assert 'Participation outcomes' not in overview.text
-    assert 'All dates' in overview.text
+    assert 'Participation Outcomes' not in overview.text
+    assert 'All Dates' in overview.text
+    label = overview.one('label', **{'class': 'field'})
+    assert label.one('span').text == 'Performance Period'
+    assert ('sr-only' in label.one('span').attrs.get('class', '')) == (role == 'coordinator')
 
 
 def test_coordinator_period_submit_keeps_workspace_dates_independent(app, client):
@@ -127,7 +156,7 @@ def test_director_coverage_counts_campuses_in_the_selected_period(app, client, s
     assert response.status_code == 200
     page = parse_html(response.get_data(as_text=True))
     coverage = contexts[-1]['campus_coverage']
-    assert 'Needs attention' not in page.text
+    assert 'Needs Attention' not in page.text
     assert coverage['total'] == (0 if scenario == 'no_campuses' else 9)
     assert coverage['with_activity'] + coverage['without_activity'] == coverage['total']
     assert len(page.all('a', **{'class': 'campus-coverage__tile'})) == coverage['with_activity']

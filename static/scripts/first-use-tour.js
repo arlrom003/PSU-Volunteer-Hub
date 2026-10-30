@@ -14,21 +14,21 @@
       ['help', 'Get help when needed', 'The Help page explains registration, attendance, recommendations, and account access.'],
     ],
     coordinator: [
-      ['annual-goals', 'Track campus goals', 'The large number shows approved annual targets achieved. Open it for AOP and ASP evidence, or use Campus goal proposals to submit a target for director approval. Sample previews are labelled separately.'],
-      ['summary', 'Start with campus follow-up', 'Review cancellation requests and complete attendance for ended activities. This unresolved work covers all dates; performance below uses its own reporting period.'],
-      ['create-activity', 'Create an activity', 'Add the activity details, target, cancellation deadline, and applicable SDGs before publishing.'],
-      ['activity-workspace', 'Manage activities', 'Expand Manage activities to filter records, record attendance, publish updates, and upload milestones. This workspace stays closed until you need it.'],
-      ['attendance', 'Complete attendance records', 'Record present, absent, or excused attendance for each participant. After the activity ends, confirm completion for present participants so the results can support decisions.'],
-      ['cancellations', 'Review cancellations', 'Pending campus requests appear here when a decision is needed. An empty queue is labelled clearly; the navigation also opens the cancellation workspace.'],
-      ['analytics', 'Use analytics and reports', 'Filter campus results, review attendance outcomes, then download the matching CSV or PDF report.'],
+      ['annual-goals', 'Track Campus Goals', 'The large number shows approved annual targets achieved. Open it for AOP and ASP evidence, or use Campus Goal Proposals to submit a target for director approval. Sample previews are labelled separately.'],
+      ['summary', 'Start with Campus Follow-Up', 'Review cancellation requests and complete attendance for ended activities. This unresolved work covers all dates; performance below uses its own reporting period.'],
+      ['create-activity', 'Create an Activity', 'Add the activity details, target, cancellation deadline, and applicable SDGs before publishing.'],
+      ['activity-workspace', 'Manage Activities', 'Use the activity filters and campus list to record attendance, publish updates, and upload milestones. The workspace is always visible below Performance Overview.'],
+      ['attendance', 'Complete Attendance Records', 'Record present, absent, or excused attendance for each participant. After the activity ends, confirm completion for present participants so the results can support decisions.'],
+      ['cancellations', 'Review Cancellations', 'Pending campus requests appear here when a decision is needed. An empty queue is labelled clearly; the navigation also opens the cancellation workspace.'],
+      ['analytics', 'Use Analytics and Reports', 'Filter campus results, review attendance outcomes, then download the matching CSV or PDF report.'],
     ],
     director: [
-      ['annual-goals', 'Review annual-plan achievement', 'Open the large number for university targets and campus goal comparisons. Review goal proposals to approve campus targets. AOP and ASP retain their own counts; attendance by recorded sex is separate evidence.'],
-      ['campus-comparison', 'Compare registrations and attendance', 'Compare campus sign-ups with recorded attendance for the selected period. Repeated participation counts per activity; historical source records have their own separate view.'],
-      ['analytics', 'Filter the evidence', 'Analytics filters keep their scope through pagination and report downloads.'],
-      ['recognition', 'Review recognition and demographics', 'Open internal analytics to review declared demographic responses and verified PSU participation rankings.'],
-      ['reports', 'Download reports', 'Apply the analytics filters, then choose CSV or PDF to download the matching activity report.'],
-      ['calendar', 'Open the activity calendar', 'Use the read-only calendar to review scheduled activities across PSU campuses.'],
+      ['annual-goals', 'Review Annual-Plan Achievement', 'Open the large number for university targets and campus goal comparisons. Review goal proposals to approve campus targets. AOP and ASP retain their own counts; attendance by recorded sex is separate evidence.'],
+      ['campus-comparison', 'Compare Registrations and Attendance', 'Compare campus sign-ups with recorded attendance for the selected period. Repeated participation counts per activity; historical source records have their own separate view.'],
+      ['analytics', 'Filter the Evidence', 'Analytics filters keep their scope through pagination and report downloads.'],
+      ['recognition', 'Review Recognition and Demographics', 'Open internal analytics to review declared demographic responses and verified PSU participation rankings.'],
+      ['reports', 'Download Reports', 'Apply the analytics filters, then choose CSV or PDF to download the matching activity report.'],
+      ['calendar', 'Open the Activity Calendar', 'Use the read-only calendar to review scheduled activities across PSU campuses.'],
     ],
     admin: [
       ['summary', 'Check the system summary', 'Review the current database connection and account totals before making administrative changes.'],
@@ -62,7 +62,7 @@
       <h2 id="tourTitle"></h2>
       <p id="tourText" aria-live="polite"></p>
       <div class="first-use-tour__actions">
-        <button class="btn btn--ghost" type="button" data-tour-skip>Skip guide</button>
+        <button class="btn btn--ghost" type="button" data-tour-skip>${['coordinator', 'director'].includes(role) ? 'Skip Guide' : 'Skip guide'}</button>
         <span class="first-use-tour__navigation">
           <button class="btn btn--outline" type="button" data-tour-back>Back</button>
           <button class="btn btn--primary" type="button" data-tour-next>Next</button>

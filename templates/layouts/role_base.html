@@ -1,3 +1,4 @@
+{% set reporting_page = request.endpoint in ['coordinator.coordinator_dash', 'coordinator.analytics', 'director.director_dash', 'director.analytics'] %}
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -29,13 +30,13 @@
     {% block styles %}{% endblock %}
   </head>
   <body
-    class="role-page role-page--{{ current_user.role }}"
+    class="role-page role-page--{{ current_user.role }}{{ ' reporting-page' if reporting_page }}"
     data-tour-role="{{ current_user.role }}"
     data-tour-dismiss-url="{{ url_for('events.dismiss_first_use_guide') }}"
     data-tour-first-use="{{ 'true' if tour_page|default(false) and current_user.first_use_guide_dismissed_at is none else 'false' }}"
     data-tour-replay="{{ 'true' if tour_page|default(false) and request.args.get('tour') == '1' else 'false' }}"
   >
-    <a class="skip-link" href="#main-content">Skip to main content</a>
+    <a class="skip-link" href="#main-content">{{ 'Skip to Main Content' if reporting_page else 'Skip to main content' }}</a>
     <div
       class="shell-overlay"
       id="shellOverlay"
@@ -49,7 +50,7 @@
           class="icon-button role-menu-button"
           type="button"
           data-sidebar-toggle
-          aria-label="Open navigation"
+          aria-label="{{ 'Open Navigation' if reporting_page else 'Open navigation' }}"
           aria-controls="roleSidebar"
           aria-expanded="false"
         >

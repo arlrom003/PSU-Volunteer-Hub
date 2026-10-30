@@ -52,9 +52,9 @@ def test_director_routes_reuse_scoped_deduplicated_goals_without_sex_queries(app
         response = client.get(path)
         assert response.status_code == 200
         body = response.get_data(as_text=True)
-        assert 'Top-performing campus' in body and 'goal-campus-ranking' in body
-        assert '100.0% · 1 of 1 goals achieved' in body
-        assert 'Participation by recorded sex' not in body
+        assert 'Top-Performing Campus' in body and 'goal-campus-ranking' in body
+        assert '100.0% · 1 of 1 Goals Achieved' in body
+        assert 'Participation by Recorded Sex' not in body
     forbidden.assert_not_called()
     monkeypatch.undo()
     assert 'Actual participation by recorded sex' in client.get('/annual-goals?campus=1').get_data(as_text=True)
@@ -76,14 +76,14 @@ def test_coordinator_still_gets_participation_and_director_empty_preview_states(
     _login_as(client,uid)
     for path in ['/coordinator_dash','/coordinator_analytics']:
         body = client.get(path).get_data(as_text=True)
-        assert 'Participation by recorded sex' in body and 'goal-campus-ranking' not in body
+        assert 'Participation by Recorded Sex' in body and 'goal-campus-ranking' not in body
     uid = _create_user(app,email='campus-ranking-empty@test.com',role='director',campus_id=1)
     _login_as(client,uid)
     body = client.get('/director_dash').get_data(as_text=True)
     assert 'No approved campus targets for this year.' in body
     target(campus=1)
     body = client.get('/director_dash').get_data(as_text=True)
-    assert 'No goals achieved yet' in body
+    assert 'No Goals Achieved Yet' in body
     preview = client.get('/director_dash?sample=1').get_data(as_text=True)
-    assert '3 campuses tied' in preview and 'Annual goals achieved · Sample data' in preview
-    assert 'No goals achieved yet' in client.get('/director_dash').get_data(as_text=True)
+    assert '3 Campuses Tied' in preview and 'Annual Goals Achieved · Sample Data' in preview
+    assert 'No Goals Achieved Yet' in client.get('/director_dash').get_data(as_text=True)

@@ -722,7 +722,7 @@ class TestPhaseOnePublicExperience:
         _login_as(client, director_id)
         director_body = client.get('/analytics').get_data(as_text=True)
         assert 'class="info-tip"' in director_body
-        assert 'About live activity report' in director_body
+        assert 'About Live Activity Report' in director_body
 
     def test_director_analytics_separates_live_and_historical_views(self, client, app):
         director_id = _create_user(
@@ -738,7 +738,7 @@ class TestPhaseOnePublicExperience:
         assert 'Historical Activities' not in live
         assert 'Historical Activities' in historical
         assert 'Live Activity Report' not in historical
-        assert 'Role demographics' not in historical
+        assert 'Role Demographics' not in historical
         assert 'Live Activity Report' in invalid
 
     def test_live_analytics_keeps_advanced_filters_out_of_the_primary_scope(self, client, app):
@@ -775,9 +775,9 @@ class TestPhaseOnePublicExperience:
         _login_as(client, coordinator_id)
 
         body = client.get('/coordinator_dash').get_data(as_text=True)
-        assert body.index('Needs attention') < body.index('Performance overview')
-        assert body.index('Performance overview') < body.index('Manage activities')
-        assert 'Review requests' not in body
+        assert body.index('Needs Attention') < body.index('Performance Overview')
+        assert body.index('Performance Overview') < body.index('Manage Activities')
+        assert 'Review Requests' not in body
         assert 'No activities need follow-up in this scope.' in body
 
     def test_guide_dismissal_only_updates_the_authenticated_user(self, client, app):
@@ -2563,7 +2563,7 @@ class TestReportingSystem:
             assert parsed['campus_mode'] == ['include']
             assert parsed['activity_name'] == ['Multi-campus fixture']
         def titles(page):
-            region = page.one('div', **{'aria-label': 'Live activity report table'})
+            region = page.one('div', **{'aria-label': 'Live Activity Report Table'})
             return [row.all('td')[0].text for row in region.one('tbody').all('tr')]
         first_titles = titles(document)
         second_titles = titles(parse_html(client.get(next_page).get_data(as_text=True)))
@@ -2620,7 +2620,7 @@ class TestReportingSystem:
         historical = form_with_control(document, 'start_year')
         assert form_values(historical) == expected
         assert not historical.all('input', name='campus')
-        assert not document.all('div', **{'aria-label': 'Live activity report table'})
+        assert not document.all('div', **{'aria-label': 'Live Activity Report Table'})
         submitted = client.get('/analytics', query_string=form_values(historical))
         assert submitted.status_code == 200 and b'Historical Activities' in submitted.data
         links = [link.attrs['href'] for link in document.all('a')
@@ -3525,7 +3525,7 @@ class TestAnalytics:
         _login_as(client, did)
         resp = client.get('/analytics')
         assert resp.status_code == 200
-        assert 'Registrations and attendance by campus' in resp.data.decode()
+        assert 'Registrations and Attendance by Campus' in resp.data.decode()
 
     def test_live_activity_report_paginates_at_ten_rows(self, app, client):
         director_id = _create_user(app, email='page_dir@test.com', role='director')
@@ -3572,7 +3572,7 @@ class TestAnalytics:
             filters.update(campus=selected, campus_mode=scope)
         body = client.get('/analytics', query_string=filters).get_data(as_text=True)
         document = parse_html(body)
-        navigation = document.one('nav', **{'aria-label': 'Live activity report pages'})
+        navigation = document.one('nav', **{'aria-label': 'Live Activity Report Pages'})
         page_link = next(link.attrs['href'] for link in navigation.all('a')
                          if parse_qs(urlsplit(link.attrs['href']).query).get('page') == ['2'])
         live_filters = {key: [value] for key, value in filters.items()
@@ -3584,12 +3584,12 @@ class TestAnalytics:
         assert second.status_code == 200
         second_document = parse_html(second.get_data(as_text=True))
         for page in (document, second_document):
-            for link in page.one('nav', **{'aria-label': 'Live activity report pages'}).all('a'):
+            for link in page.one('nav', **{'aria-label': 'Live Activity Report Pages'}).all('a'):
                 query = parse_qs(urlsplit(link.attrs['href']).query)
                 assert query.pop('page') in (['1'], ['2'])
                 assert query == {**live_filters, 'view': ['live']}
         def titles(page):
-            region = page.one('div', **{'aria-label': 'Live activity report table'})
+            region = page.one('div', **{'aria-label': 'Live Activity Report Table'})
             return [row.all('td')[0].text for row in region.one('tbody').all('tr')]
         expected = [f'Filtered Activity {index}' for index in reversed(range(12))]
         assert titles(document) == expected[:10]
@@ -3813,7 +3813,7 @@ class TestActivityCalendarViews:
         _login_as(client, coordinator_id)
         response = client.get('/coordinator/calendar')
         assert response.status_code == 200
-        assert 'Activity calendar' in response.get_data(as_text=True)
+        assert 'Activity Calendar' in response.get_data(as_text=True)
 
     def test_director_calendar_requires_director_role(self, app, client):
         volunteer_id = _create_user(app, email='calendar-volunteer@test.com', campus_id=1)

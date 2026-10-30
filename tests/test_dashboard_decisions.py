@@ -201,22 +201,23 @@ def test_landing_pages_explain_scope_and_next_action(app, client, decisions, rol
     response = client.get(path)
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert 'Performance period' in body
-    assert 'Performance overview' in body
+    assert 'Performance Period' in body
+    assert 'Performance Overview' in body
     if role == 'coordinator':
         assert 'Attendance work across all dates' in body
         assert 'Missing attendance' in body
         assert 'awaiting completion confirmation' in body
-        assert body.index('Needs attention') < body.index('Performance overview')
+        assert body.index('Needs Attention') < body.index('Performance Overview')
     else:
-        assert 'Needs attention' not in body
-        assert 'Campus activity coverage' in body
+        assert 'Needs Attention' not in body
+        assert 'Campus Activity Coverage' in body
     event_ids = re.findall(r'data-attention-event="(\d+)"', body)
     assert len(event_ids) == len(set(event_ids))
     assert 'How these numbers are counted' not in body
     if role == 'coordinator':
-        assert re.search(r'<details[^>]+id="activity-workspace"\s*>', body)
+        assert re.search(r'<section[^>]+id="activity-workspace"', body)
+        assert not re.search(r'<details[^>]+id="activity-workspace"', body)
         filtered = client.get(path + '?workspace=1&status=all').get_data(as_text=True)
-        assert re.search(r'<details[^>]+id="activity-workspace" open>', filtered)
+        assert re.search(r'<section[^>]+id="activity-workspace"', filtered)
     if role == 'coordinator':
-        assert '1 request awaits' in body and 'Review requests' in body
+        assert '1 Request Awaits' in body and 'Review Requests' in body

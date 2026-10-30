@@ -5,9 +5,9 @@ from datetime import datetime, timedelta
 
 
 ATTENTION_LABELS = {
-    'pending_attendance': 'Attendance awaiting completion',
-    'low_attendance': 'Attendance below the 75% review guide',
-    'missed_targets': 'Participant targets not reached',
+    'pending_attendance': 'Attendance Awaiting Completion',
+    'low_attendance': 'Attendance below the 75% Review Guide',
+    'missed_targets': 'Participant Targets Not Reached',
 }
 
 
@@ -36,7 +36,7 @@ def resolve_period(args, now=None):
         comparison = (previous_start.isoformat(), previous_end.replace(
             day=min(today.day, monthrange(previous_end.year, previous_end.month)[1])).isoformat())
     label = f'{start} to {end}' if start and end else (
-        f'From {start}' if start else f'Until {end}' if end else 'All dates')
+        f'From {start}' if start else f'Until {end}' if end else 'All Dates')
     return {'value': period, 'start': start, 'end': end, 'label': label,
             'comparison': comparison}
 

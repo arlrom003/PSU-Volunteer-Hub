@@ -41,7 +41,7 @@ test('campus bars show exact counts including zeros, integer ticks and contextua
     }
     assert.equal(layout.xaxis.range[0], 0);
     assert.equal(layout.xaxis.tickformat, ',.0f');
-    assert.equal(layout.xaxis.title.text, 'Participation count');
+    assert.equal(layout.xaxis.title.text, 'Participation Count');
     assert.match(layout.yaxis.ticktext[0], /<br>/);
     assert.equal(traces[0].y[0], 'Pangasinan State University Extended Campus');
     assert.equal(traces[1].marker.pattern.shape, '/');

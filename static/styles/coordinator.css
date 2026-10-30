@@ -4,6 +4,47 @@
   color: var(--primary);
 }
 
+.role-page--coordinator .dashboard-overview > .goal-overview {
+  margin-bottom: 0;
+  padding: 24px;
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--gold) 2%, transparent);
+}
+.coordinator-briefing { margin-top: 56px; }
+.attention-pagination { gap: 8px; margin-top: 1rem; }
+.attention-pagination__page,
+.attention-pagination__arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: var(--control-radius);
+  color: var(--primary);
+  background: transparent;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+.attention-pagination__arrow { border: 1px solid var(--primary); cursor: pointer; }
+.attention-pagination__arrow .material-symbols-outlined { font-size: 20px; }
+.attention-pagination__page {
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: .875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.attention-pagination__arrow:not(:disabled):hover { background: var(--primary-light); }
+.attention-pagination__page:hover { background: var(--primary-hover); }
+.attention-pagination :is(a, button):focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+.attention-pagination__arrow:disabled { opacity: .4; cursor: default; }
+@media (max-width: 640px) {
+  .role-page--coordinator .dashboard-overview > .goal-overview { padding: 16px; }
+  .coordinator-briefing { margin-top: 40px; }
+}
+
 .readiness-list {
   display: grid;
   gap: 12px;
@@ -30,14 +71,18 @@
 }
 
 .calendar-nav { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
-.calendar-grid { border: 1px solid var(--outline-variant); border-radius: var(--radius); display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); overflow: hidden; }
-.calendar-weekdays { display: contents; }
-.calendar-weekdays span { background: var(--surface-container-low); color: var(--on-surface-variant); font-size: .8rem; font-weight: 700; padding: .55rem .25rem; text-align: center; }
-.calendar-day { border-right: 1px solid var(--outline-variant); border-top: 1px solid var(--outline-variant); min-height: 7rem; padding: .45rem; }
 .calendar-day--empty { background: var(--surface-low); }
-.calendar-entry { background: var(--primary-light); color: var(--primary); display: block; font-size: .76rem; font-weight: 700; margin-top: .3rem; padding: .3rem; text-decoration: none; }
+.calendar-entry { background: var(--primary-light); color: var(--primary); display: block; font-size: .8rem; font-weight: 700; margin-top: .3rem; padding: .3rem; text-decoration: none; min-height: 44px; overflow-wrap: anywhere; }
 .calendar-entry small { display: block; font-weight: 400; margin-top: .2rem; }
-@media (max-width: 760px) { .calendar-day { min-height: 5rem; padding: .25rem; } .calendar-entry { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .calendar-entry small { display: none; } }
+.campus-calendar__hint { margin: 0 0 8px; color: var(--on-surface-variant); font-size: .875rem; }
+.campus-calendar__scroll { min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+.campus-calendar__scroll:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+.campus-calendar { width: 100%; min-width: 42rem; table-layout: fixed; border-collapse: collapse; }
+.campus-calendar th { padding: .5rem .25rem; background: var(--surface-container-low); color: var(--on-surface-variant); font-size: .8rem; text-align: center; }
+.campus-calendar td { height: 4.5rem; padding: .35rem; border: 1px solid var(--outline-variant); vertical-align: top; }
+.campus-calendar .calendar-entry:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+.campus-calendar .calendar-entry:hover { text-decoration: underline; }
+.calendar-nav .btn { min-height: 44px; }
 /* Activity SDG choices are intentionally compact but retain native controls. */
 .choice-fieldset { display: block; width: 100%; border: 1px solid var(--border, #cbd5e1); border-radius: .5rem; padding: 1rem; }
 .choice-fieldset legend { font-weight: 700; padding: 0 .25rem; }

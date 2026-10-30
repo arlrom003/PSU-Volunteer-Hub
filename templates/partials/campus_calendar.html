@@ -1,0 +1,21 @@
+<nav class="calendar-nav" aria-label="Calendar Month">
+  {% if previous_calendar_url %}<a class="btn btn--sm btn--ghost" href="{{ previous_calendar_url }}">Previous Month</a>{% else %}<span>First Month</span>{% endif %}
+  <strong>{{ calendar_month }}</strong>
+  {% if next_calendar_url %}<a class="btn btn--sm btn--ghost" href="{{ next_calendar_url }}">Next Month</a>{% else %}<span>Last Month</span>{% endif %}
+</nav>
+<p class="campus-calendar__hint" id="calendar-scroll-hint">Scroll horizontally to view the full week when needed.</p>
+<div class="campus-calendar__scroll" tabindex="0" role="region" aria-label="{{ calendar_month }} Campus Activities" aria-describedby="calendar-scroll-hint">
+  <table class="campus-calendar">
+    <caption class="sr-only">{{ calendar_month }} activity calendar. Activities for your campus.</caption>
+    <thead><tr>{% for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] %}<th scope="col">{{ day }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for week in calendar_weeks %}<tr>{% for day in week %}
+      <td class="calendar-day{{ ' calendar-day--empty' if not day }}">
+        {% if day %}<strong>{{ day }}</strong>
+        {% for event in calendar_events.get(day, []) %}
+          <a class="calendar-entry" href="{{ url_for('coordinator.edit_activity', event_id=event.id) }}">{{ event.title }}<small>{{ event.date.strftime('%I:%M %p') }} · {{ event.category or 'General' }}{% if event.sdgs %} · SDG {{ event.sdgs|map(attribute='number')|join(', ') }}{% endif %}</small></a>
+        {% endfor %}{% endif %}
+      </td>
+    {% endfor %}</tr>{% endfor %}</tbody>
+  </table>
+</div>
+{% if not calendar_events %}<p class="empty-state">No activities are scheduled this month. Use the month controls to review your calendar.</p>{% endif %}

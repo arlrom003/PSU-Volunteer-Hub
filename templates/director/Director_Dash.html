@@ -3,21 +3,21 @@
 {% set tour_page = true %}
 {% block title %}Director Dashboard · PSU Volunteer Hub{% endblock %}
 {% block header_title %}Director Console{% endblock %}
-{% block header_subtitle %}University-wide oversight{% endblock %}
+{% block header_subtitle %}University-Wide Oversight{% endblock %}
 {% block content %}
 <div class="dashboard-overview">
   <header class="page-heading">
-    <div><h1>University overview</h1><p>Track annual goals and follow up on campus delivery.</p></div>
-    <a class="btn btn--primary" data-tour-id="analytics" href="{{ url_for('director.analytics', start_date=period.start, end_date=period.end, sample=1 if annual_plan.sample else none, goal_year=annual_plan.year) }}">Open analytics</a>
+    <div><h1>University Overview</h1><p>Track annual goals and follow up on campus delivery.</p></div>
+    <a class="btn btn--primary" data-tour-id="analytics" href="{{ url_for('director.analytics', start_date=period.start, end_date=period.end, sample=1 if annual_plan.sample else none, goal_year=annual_plan.year) }}">Open Analytics</a>
   </header>
-  {{ annual_plan_summary(annual_plan, 'University annual-plan achievement') }}
+  {{ annual_plan_summary(annual_plan, 'University Annual-Plan Achievement') }}
 
   <div data-tour-id="target-progress">{{ performance_metrics(performance, period, deltas, 'director.director_dash') }}</div>
   <details class="analytics-disclosure" id="campus-participation">
     <summary data-tour-id="campus-comparison"><span>Campus Participation</span><small>Compare registrations and verified attendance across campuses.</small></summary>
     <div class="analytics-disclosure__content">
       <section class="campus-coverage" aria-labelledby="campus-coverage-title">
-        <h2 id="campus-coverage-title">Campus activity coverage</h2>
+        <h2 id="campus-coverage-title">Campus Activity Coverage</h2>
         <p class="scope-note">{{ period.label }}. Activity records in this period, not a campus performance rating.</p>
         {% if campus_coverage.total %}
           <p id="campus-coverage-summary"><strong>{{ campus_coverage.with_activity }} of {{ campus_coverage.total }} campuses</strong> have activity records; {{ campus_coverage.without_activity }} have no activity records.</p>
@@ -25,30 +25,30 @@
             <span class="campus-coverage__with" style="flex-grow: {{ campus_coverage.with_activity }}" aria-hidden="true"></span>
             <span class="campus-coverage__without" style="flex-grow: {{ campus_coverage.without_activity }}" aria-hidden="true"></span>
           </div>
-          <div class="campus-coverage__legend" aria-hidden="true"><span><i class="campus-coverage__with"></i>With activity records</span><span><i class="campus-coverage__without"></i>No activity records</span></div>
+          <div class="campus-coverage__legend" aria-hidden="true"><span><i class="campus-coverage__with"></i>With Activity Records</span><span><i class="campus-coverage__without"></i>No Activity Records</span></div>
           <ul class="campus-coverage__campuses">
             {% for campus in campus_coverage.campuses %}
               <li><a class="campus-coverage__tile{{ ' campus-coverage__tile--empty' if not campus.activities }}" href="{{ url_for('director.analytics', campus=campus.id, campus_mode='include', start_date=period.start, end_date=period.end) }}#decision-records">
                 <strong>{{ campus.name }}</strong>
-                <span class="campus-coverage__count">{{ campus.activities }} {{ 'activity' if campus.activities == 1 else 'activities' }}</span>
-                <span>{{ 'With activity records' if campus.activities else 'No activity records' }}</span>
-                <span class="campus-coverage__action">Review records<span class="sr-only"> for {{ campus.name }}</span></span>
+                <span class="campus-coverage__count">{{ campus.activities }} {{ 'Activity' if campus.activities == 1 else 'Activities' }}</span>
+                <span>{{ 'With Activity Records' if campus.activities else 'No Activity Records' }}</span>
+                <span class="campus-coverage__action">Review Records<span class="sr-only"> for {{ campus.name }}</span></span>
               </a></li>
             {% endfor %}
           </ul>
         {% else %}<p class="empty-state">No campuses are configured. Activity totals can still include unassigned records.</p>{% endif %}
       </section>
-    {{ chart('Registrations and attendance by campus', 'Sign-ups compared with recorded present attendance. Incomplete attendance remains provisional.', period.label, 'director-campus-chart', {'labels': dashboard_data.campuses|map(attribute='label')|list, 'primary': dashboard_data.campuses|map(attribute='registrations')|list, 'secondary': dashboard_data.campuses|map(attribute='attended')|list}, 'grouped') }}
+    {{ chart('Registrations and Attendance by Campus', 'Sign-ups compared with recorded present attendance. Incomplete attendance remains provisional.', period.label, 'director-campus-chart', {'labels': dashboard_data.campuses|map(attribute='label')|list, 'primary': dashboard_data.campuses|map(attribute='registrations')|list, 'secondary': dashboard_data.campuses|map(attribute='attended')|list}, 'grouped') }}
     </div>
   </details>
 
   <details class="secondary-workspace">
-    <summary>Calendar, reports, and supporting evidence</summary>
-    <nav class="overview-links" aria-label="Director evidence workspaces">
-      <a class="btn btn--outline" data-tour-id="calendar" href="{{ url_for('director.activity_calendar') }}">Activity calendar</a>
-      <a class="btn btn--outline" data-tour-id="reports" href="{{ url_for('director.analytics', start_date=period.start, end_date=period.end) }}#filters">Reports and exports</a>
-      <a class="btn btn--outline" data-tour-id="recognition" href="{{ url_for('director.analytics') }}#supporting-insights">Recognition and demographics</a>
-      <a class="btn btn--outline" href="{{ url_for('director.analytics', view='historical') }}">Historical source records</a>
+    <summary>Calendar, Reports, and Supporting Evidence</summary>
+    <nav class="overview-links" aria-label="Director Evidence Workspaces">
+      <a class="btn btn--outline" data-tour-id="calendar" href="{{ url_for('director.activity_calendar') }}">Activity Calendar</a>
+      <a class="btn btn--outline" data-tour-id="reports" href="{{ url_for('director.analytics', start_date=period.start, end_date=period.end) }}#filters">Reports and Exports</a>
+      <a class="btn btn--outline" data-tour-id="recognition" href="{{ url_for('director.analytics') }}#supporting-insights">Recognition and Demographics</a>
+      <a class="btn btn--outline" href="{{ url_for('director.analytics', view='historical') }}">Historical Source Records</a>
     </nav>
   </details>
 </div>
