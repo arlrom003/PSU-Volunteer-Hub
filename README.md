@@ -8,10 +8,12 @@ Start with [HANDOFF.md](HANDOFF.md#current-handoff-31-october-2026) for the goal
 current state, decisions and reasons, ruled-out options, next step, relevant
 files, verification commands, and the exact skills/rules used.
 
-Both GitHub `main` branches were verified at `03d1fc1`. The original local branch
-is still at `e2e9e6e` with mixed uncommitted edits. The latest Director layout is
-integrated into the running local workspace, verified in the user's browser,
-and **not committed or pushed**. See [DIRECTOR_DASHBOARD_QA.md](DIRECTOR_DASHBOARD_QA.md).
+Both GitHub `main` branches received the Director update, feature commit
+`bdb2006`, followed by a handoff-only correction. The original local branch is
+still at `e2e9e6` with mixed uncommitted edits. The latest Director layout is
+integrated into the running local workspace, visibly verified in the user's
+browser, and pushed to both repositories. See
+[DIRECTOR_DASHBOARD_QA.md](DIRECTOR_DASHBOARD_QA.md).
 Do not confuse a local worktree, a GitHub push, and a deployed Railway revision.
 
 Current local Director behavior: Worst Performing Campus uses the lowest exact

@@ -3,8 +3,8 @@
 ## Current handoff: 31 October 2026
 
 Read this section first. It supersedes older status and next-step statements
-below, which remain dated evidence. This documentation update changes no runtime
-code, database, deployment, credentials, or repository publication.
+below, which remain dated evidence. The dashboard update is published; this
+handoff correction changes no runtime code, database, credentials, or deployment.
 
 ### Goal and current working state
 
@@ -18,22 +18,25 @@ refreshed and visibly verified in the user's existing Brave session.
 - **Active application workspace:** `C:\Users\arlro\Desktop\PSU VOLUNTEER\Psu_VolunteerHub`.
   The development server runs this workspace's `app.py` at
   `http://127.0.0.1:5000`. An isolated worktree alone does not update that server.
-- **Local Git:** original `main` is at `e2e9e6e`, three commits behind the remote
+- **Local Git:** original `main` is at `e2e9e6e`, four commits behind the remote
   tip. Its working files include the later performance changes, the new Director
   layout, and separate uncommitted security/recovery/demo-reset work. Do not
   discard, blindly stash, reset, pull over, or commit that mixed working tree.
 - **Isolated implementation:** branch `codex/director-dashboard-recognition`,
   based on `03d1fc1`, at
   `C:\Users\arlro\.codex\visualizations\2026\10\30\01a18bce-742f-71c0-99af-23e325817c86\director-dashboard`.
-  The latest layout is still working-tree content there, not a new commit.
-- **Publication verified read-only on 31 October:** both remote `main` branches
-  resolve to `03d1fc15b8fea0833128d206d0c3958de72d15c8`.
+  The latest layout is committed as `bdb2006`.
+- **Publication verified on 31 October:** both remote `main` branches were at
+  `03d1fc15b8fea0833128d206d0c3958de72d15c8` before publication. Both were
+  advanced to feature commit `bdb2006`; a documentation-only handoff correction
+  follows it on both branches.
   `origin` is `https://github.com/Xed-stack/Psu_VolunteerHub.git`;
   `thesis` is `https://github.com/arlrom003/PSU-Volunteer-Hub.git`.
   Both include the earlier dashboard/calendar/Title Case work (`9407761`,
   `e2e9e6e`), report-timeout fix, and system-performance release.
-- **Not published:** the latest Worst Performing Campus/recognition/calendar/
-  dashboard-filter relocation, this handoff refresh, and unrelated local edits.
+- **Published:** the latest Worst Performing Campus/recognition/calendar/
+  dashboard-filter relocation and its related handoff/README/QA updates are on
+  both remote `main` branches in `bdb2006`. Other local edits remain unpublished.
   A successful Git push is not evidence that Railway deployed that revision.
   Hosted deployment and performance of the latest published revision remain
   unverified here.

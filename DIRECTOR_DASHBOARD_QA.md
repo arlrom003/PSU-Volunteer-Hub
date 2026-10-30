@@ -1,11 +1,12 @@
 # Director dashboard verification
 
 Continuation status, 31 October 2026: the layout below is integrated into the
-original running workspace and visibly verified, but remains uncommitted and
-unpushed. Both remote `main` tips are `03d1fc1`. The original-workspace rerun
-passed 22 focused cases. For decisions, skills/rules, commands, and the next
-action, read [HANDOFF.md](HANDOFF.md#current-handoff-31-october-2026). This
-documentation refresh performs no new runtime or hosted verification.
+original running workspace, visibly verified, and published to both `main`
+branches in feature commit `bdb2006`. A documentation-only handoff correction
+follows that commit. The original-workspace rerun passed 22 focused cases. For
+decisions, skills/rules, commands, and the next action, read
+[HANDOFF.md](HANDOFF.md#current-handoff-31-october-2026). This documentation
+refresh performs no new runtime or hosted verification.
 
 Date: 30 October 2026
 
