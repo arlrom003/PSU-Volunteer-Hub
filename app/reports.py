@@ -11,6 +11,8 @@ All authorization/scoping decisions happen in the calling route:
   for university-wide reporting.
 """
 from datetime import datetime, timedelta
+from sqlalchemy import case, func
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.models import db
 from app.models.event import Event, Registration, Attendance, Campus, SdgGoal
@@ -122,7 +124,43 @@ def build_events_report(campus_id=None, start_date=None, end_date=None,
     if sdg_id:
         query = query.filter(Event.sdgs.any(SdgGoal.id == sdg_id))
 
-    events = query.order_by(Event.date.desc(), Event.id.desc()).all()
+    event_ids = query.with_entities(Event.id).statement
+    events = query.options(joinedload(Event.campus), selectinload(Event.sdgs)).order_by(
+        Event.date.desc(), Event.id.desc()).all()
+
+    sex_scope = db.true()
+    if sex in ('male', 'female', 'prefer_not_to_say'):
+        sex_scope = User.sex == sex
+    elif sex == 'unrecorded':
+        sex_scope = User.id.isnot(None) & User.sex.is_(None)
+    eligible = Registration.status != 'cancelled'
+    valid = eligible & sex_scope
+    attendance_eligible = eligible | Registration.status.is_(None)
+
+    def count_when(condition):
+        return func.count(case((condition, 1)))
+
+    registration_counts = {
+        row[0]: row[1:] for row in db.session.query(
+            Registration.event_id,
+            count_when(valid),
+            count_when(valid & Registration.user_id.isnot(None)),
+            count_when(valid & Registration.external_participant_id.isnot(None)),
+            count_when((Registration.status == 'completed') & sex_scope),
+            count_when(Registration.status == 'cancelled'),
+            count_when(attendance_eligible & Attendance.id.is_(None)),
+            count_when(attendance_eligible & (Attendance.status == 'present') &
+                       ((Registration.status != 'completed') | Registration.status.is_(None))),
+            count_when(valid & (Attendance.status == 'present')),
+        ).outerjoin(User, Registration.user_id == User.id).outerjoin(
+            Attendance, Attendance.registration_id == Registration.id).filter(
+            Registration.event_id.in_(event_ids)).group_by(Registration.event_id).all()
+    }
+    attendance_counts = dict(db.session.query(
+        Attendance.event_id, func.count(Attendance.id)).outerjoin(
+        User, Attendance.user_id == User.id).filter(
+        Attendance.event_id.in_(event_ids), Attendance.status == 'present',
+        sex_scope).group_by(Attendance.event_id).all())
 
     rows = []
     total_reg = 0
@@ -134,41 +172,12 @@ def build_events_report(campus_id=None, start_date=None, end_date=None,
     total_target = 0
 
     for e in events:
-        # Valid registrations exclude cancelled ones, matching the coordinator
-        # attendance view and the analytics definition of "Registrations".
-        valid = Registration.query.filter(
-            Registration.event_id == e.id,
-            Registration.status != 'cancelled')
-        if sex in ('male', 'female', 'prefer_not_to_say'):
-            valid = valid.join(User, Registration.user_id == User.id).filter(User.sex == sex)
-        elif sex == 'unrecorded':
-            valid = valid.join(User, Registration.user_id == User.id).filter(User.sex.is_(None))
-        reg = valid.count()
-        psu = valid.filter(Registration.user_id.isnot(None)).count()
-        external = valid.filter(
-            Registration.external_participant_id.isnot(None)).count()
-        attendance = Attendance.query.filter_by(event_id=e.id, status='present')
-        completed_query = Registration.query.filter_by(event_id=e.id, status='completed')
-        if sex in ('male', 'female', 'prefer_not_to_say'):
-            attendance = attendance.join(User, Attendance.user_id == User.id).filter(User.sex == sex)
-            completed_query = completed_query.join(User, Registration.user_id == User.id).filter(User.sex == sex)
-        elif sex == 'unrecorded':
-            attendance = attendance.join(User, Attendance.user_id == User.id).filter(User.sex.is_(None))
-            completed_query = completed_query.join(User, Registration.user_id == User.id).filter(User.sex.is_(None))
-        attended = attendance.count()
-        completed = completed_query.count()
-        cancelled = Registration.query.filter_by(event_id=e.id, status='cancelled').count()
+        (reg, psu, external, completed, cancelled, missing, unconfirmed,
+         outcome_attended) = registration_counts.get(e.id, (0,) * 8)
+        attended = attendance_counts.get(e.id, 0)
         target = e.target_participants
-        eligible = [registration for registration in e.registrations
-                    if registration.status != 'cancelled']
-        missing = sum(registration.attendance_record is None for registration in eligible)
-        unconfirmed = sum(bool(registration.attendance_record and
-                              registration.attendance_record.status == 'present' and
-                              registration.status != 'completed') for registration in eligible)
         ended = now >= (e.end_date or e.date)
         complete = ended and not missing and not unconfirmed
-        outcome_attended = valid.join(Attendance, Attendance.registration_id == Registration.id).filter(
-            Attendance.status == 'present').count()
         if attention == 'pending_attendance' and not (ended and not complete):
             continue
         if attention == 'low_attendance' and not (complete and reg and outcome_attended / reg < .75):
