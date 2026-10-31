@@ -101,7 +101,35 @@ def _live_report_context(period):
         scope.append(f'SDG: {sdg.number}, {sdg.name}')
     if request.args.get('attention'):
         scope.append('Attention: ' + evidence['attention_labels'][request.args['attention']])
-    return dict(evidence, campuses=campuses, selected_campuses=selected, campus_mode=mode,
+
+    def _without(*keys):
+        return {key: value for key, value in query.items() if key not in keys}
+
+    chips = []
+    if request.args.get('activity_name', '').strip():
+        chips.append({'label': 'Activity: ' + request.args['activity_name'].strip(),
+                      'query': _without('activity_name')})
+    if request.args.get('category', '').strip():
+        chips.append({'label': 'Category: ' + request.args['category'].strip(),
+                      'query': _without('category')})
+    if names and not error:
+        chips.append({'label': (('All campuses except ' if mode == 'exclude' else 'Campuses: ')
+                                + ', '.join(names)), 'query': _without('campus', 'campus_mode')})
+    if sex:
+        chips.append({'label': 'Sex: ' + {'female': 'Female', 'male': 'Male',
+                                          'prefer_not_to_say': 'Prefer Not to Say',
+                                          'unrecorded': 'Not Recorded'}[sex],
+                      'query': _without('sex')})
+    if sdg_id:
+        chips.append({'label': f'SDG {sdg.number}: {sdg.name}', 'query': _without('sdg_id')})
+    if request.args.get('attention'):
+        chips.append({'label': 'Attention: ' + evidence['attention_labels'][request.args['attention']],
+                      'query': _without('attention')})
+    if request.args.get('department', '').strip():
+        chips.append({'label': 'Affiliation: ' + request.args['department'].strip(),
+                      'query': _without('department')})
+    return dict(evidence, active_filter_chips=chips,
+        campuses=campuses, selected_campuses=selected, campus_mode=mode,
         campus_error=error, live_query=query, live_navigation_query=dict(query, view=['live']),
         live_scope=scope, live_summary=evidence['evidence_summary'],
         dashboard_data=summarize_report(evidence['evidence_rows']),

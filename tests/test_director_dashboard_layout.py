@@ -177,3 +177,67 @@ def test_invalid_dashboard_campus_scope_shows_error_without_broadening(app, clie
     assert page.one('p', **{'role': 'alert'})
     assert context['performance']['activities'] == 0
     assert context['campus_coverage']['total'] == 0
+
+
+def test_attention_filter_groups_with_filters_not_actions(app, client):
+    _login_as(client, _create_user(app, role='director'))
+    _, page, _ = rendered(app, client, '/director_dash?period=all')
+    panel = page.one('section', id='filters')
+    primary = panel.one('div', **{'class': 'analytics-filter-primary'})
+    assert primary.one('select', name='attention')
+    actions = panel.one('div', **{'class': 'analytics-filter-actions'})
+    assert not actions.all('select', name='attention')
+    search = primary.one('input', name='activity_name')
+    assert search.attrs['placeholder'] == 'Search activity titles'
+    assert search.attrs['aria-describedby'] == 'activity-name-help'
+    assert primary.one('small', id='activity-name-help')
+
+
+def test_filters_report_scope_count_and_removable_chips(app, client):
+    _login_as(client, _create_user(app, role='director'))
+    _, page, _ = rendered(app, client, '/director_dash?period=all&category=Environment&activity_name=clean')
+    panel = page.one('section', id='filters')
+    count = panel.one('p', **{'class': 'filter-result-count'})
+    assert count.text.endswith('in this scope')
+    chips = panel.all('a', **{'class': 'filter-chip'})
+    assert [chip.text.startswith(label) for chip, label in zip(chips, ['Activity: clean', 'Category: Environment'])]
+    assert [chip.attrs['aria-label'] for chip in chips] == [
+        'Remove filter: Activity: clean', 'Remove filter: Category: Environment']
+    removing_activity, removing_category = (parse_qs(urlsplit(chip.attrs['href']).query) for chip in chips)
+    assert removing_activity.get('category') == ['Environment'] and 'activity_name' not in removing_activity
+    assert removing_category.get('activity_name') == ['clean'] and 'category' not in removing_category
+    assert all(urlsplit(chip.attrs['href']).fragment == 'cross-campus-comparison' for chip in chips)
+
+
+def test_filters_hide_clear_all_until_a_filter_applies(app, client):
+    _login_as(client, _create_user(app, role='director'))
+    _, plain, _ = rendered(app, client, '/director_dash?period=all')
+    assert not [link for link in plain.one('section', id='filters').all('a') if link.text == 'Clear All Filters']
+    _, filtered, _ = rendered(app, client, '/director_dash?period=all&category=Environment')
+    clear = next(link for link in filtered.one('section', id='filters').all('a')
+                 if link.text == 'Clear All Filters')
+    assert parse_qs(urlsplit(clear.attrs['href']).query) == {}
+
+
+def test_filters_zero_state_confirms_scope_and_recovery(app, client):
+    _login_as(client, _create_user(app, role='director'))
+    _, page, context = rendered(app, client, '/director_dash?period=all&activity_name=NoSuchActivity')
+    assert context['evidence_rows'] == []
+    zero = page.one('section', id='filters').one('p', **{'class': 'empty-state filter-zero-state'})
+    assert 'No activities match this scope.' in zero.text
+    assert 'Clear All Filters' in zero.text
+    assert page.one('p', **{'class': 'filter-result-count'}).text == '0 activities in this scope'
+
+
+def test_campus_picker_reads_as_one_of_the_advanced_filter_fields(app, client):
+    _login_as(client, _create_user(app, role='director'))
+    _, page, _ = rendered(app, client, '/director_dash?period=all')
+    content = page.one('div', **{'class': 'analytics-advanced-filters__content'})
+    picker = content.one('details', **{'class': 'campus-filter analytics-campus-filter'})
+    assert picker.one('span', **{'class': 'campus-filter__label'}).text == 'Campus'
+    assert picker.one('span', **{'class': 'campus-filter__value'}).text == 'All campuses'
+    assert picker.one('select', name='campus_mode')
+    _, excluded, _ = rendered(
+        app, client, '/director_dash?period=all&campus=1&campus=2&campus_mode=exclude')
+    value = excluded.one('span', **{'class': 'campus-filter__value'})
+    assert value.text == '2 excluded'

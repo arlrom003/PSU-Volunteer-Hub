@@ -1122,15 +1122,159 @@ body:has(.activity-page) .flash--success { background: var(--primary); }
   padding: 16px 0;
 }
 
+/* The campus picker reads as one more labelled control in the advanced row and
+   only takes the full width once its checkbox grid is open. */
 .analytics-advanced-filters__content .analytics-campus-filter {
+  grid-column: auto;
+  min-width: 0;
+}
+
+.analytics-advanced-filters__content .analytics-campus-filter[open] {
   grid-column: 1 / -1;
+}
+
+.analytics-advanced-filters__content .analytics-campus-filter > summary {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-height: 0;
+  padding: 0;
+  color: var(--on-surface);
+  cursor: pointer;
+  font-weight: 400;
+}
+
+.analytics-advanced-filters__content .analytics-campus-filter > summary::marker {
+  content: '';
+}
+
+.campus-filter__label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--on-surface-variant);
+}
+
+.campus-filter__value {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.campus-filter__value::after {
+  content: '';
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.analytics-advanced-filters__content .analytics-campus-filter > summary:hover {
+  background: transparent;
+}
+
+.analytics-advanced-filters__content .analytics-campus-filter > summary:hover .campus-filter__value {
+  border-color: var(--primary);
+}
+
+.analytics-advanced-filters__content .analytics-campus-filter[open] > summary .campus-filter__value {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.analytics-advanced-filters__content .analytics-campus-filter[open] > summary .campus-filter__value::after {
+  margin-top: 4px;
+  transform: rotate(-135deg);
 }
 
 .analytics-filter-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: end;
+  align-items: center;
   gap: 12px;
+  margin-top: 4px;
+}
+
+.filter-result-count {
+  margin: 0 auto 0 0;
+  color: var(--on-surface-variant, #4a4a4a);
+}
+
+.filter-result-count strong {
+  color: var(--on-surface);
+  font-variant-numeric: tabular-nums;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--primary);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--on-surface);
+  font-weight: 600;
+  text-decoration: none;
+  touch-action: manipulation;
+  overflow-wrap: anywhere;
+}
+
+.filter-chip:hover {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.filter-chip:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.filter-chip__remove {
+  font-size: 18px;
+  line-height: 1;
+  color: var(--primary);
+}
+
+.filter-zero-state {
+  margin-top: 12px;
+}
+
+@media (min-width: 768px) {
+  .analytics-filter-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    padding: 12px 0;
+    background: #fff;
+    box-shadow: 0 -1px 0 var(--outline-variant);
+  }
+}
+
+@media (max-width: 767px) {
+  .filter-result-count { flex-basis: 100%; }
+  .filter-chip { min-height: 44px; }
 }
 
 .role-content .filter-row .field :is(input, select),

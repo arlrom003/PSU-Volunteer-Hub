@@ -2,20 +2,23 @@
   {% set dashboard_filters = request.endpoint == 'director.director_dash' %}
   {{ heading('Filters and Reports', 'Primary filters scope the live summary, comparison charts, trend, and activity report. More filters adds campus, demographic, SDG, and affiliation scope.', 'Select a scope, then download the same live activity data as CSV or PDF.', level=3 if dashboard_filters else 2) }}
   {% set advanced_filters_active = selected_campuses or selected_sex or selected_sdg_id or selected_department %}
-  <form class="filter-row analytics-filter-form" method="get" id="analytics-filters" action="{{ url_for(request.endpoint) }}{{ '#cross-campus-comparison' if dashboard_filters }}">
+  {% set scope_url_suffix = '#cross-campus-comparison' if dashboard_filters else '' %}
+  {% set scope_count = evidence_rows|length %}
+  <form class="filter-row analytics-filter-form" method="get" id="analytics-filters" action="{{ url_for(request.endpoint) }}{{ scope_url_suffix }}">
     {% if not dashboard_filters %}<input type="hidden" name="view" value="live">{% endif %}
     {% if request.args.get('event_id') %}<input type="hidden" name="event_id" value="{{ request.args.get('event_id') }}">{% endif %}
     <div class="analytics-filter-primary">
-      <label class="field">Activity Name<input type="search" name="activity_name" autocomplete="off" value="{{ request.args.get('activity_name', '') }}" aria-describedby="activity-name-help"><small id="activity-name-help">Matches any part of the activity title, ignoring case.</small></label>
+      <label class="field">Activity Name<input type="search" name="activity_name" autocomplete="off" placeholder="Search activity titles" value="{{ request.args.get('activity_name', '') }}" aria-describedby="activity-name-help"><small id="activity-name-help">Matches any part of the activity title, ignoring case.</small></label>
       <label class="field">Start Date<input type="date" name="start_date" value="{{ period.start }}"></label>
       <label class="field">End Date<input type="date" name="end_date" value="{{ period.end }}"></label>
       <label class="field">Category<select name="category"><option value="">All Categories</option>{% for category in categories %}<option value="{{ category }}"{{ ' selected' if request.args.get('category') == category }}>{{ category }}</option>{% endfor %}</select></label>
+      <label class="field">Attention<select name="attention"><option value="">All Activity Records</option>{% for key, label in attention_labels.items() %}<option value="{{ key }}"{{ ' selected' if request.args.get('attention') == key }}>{{ label }}</option>{% endfor %}</select></label>
     </div>
     <details class="analytics-advanced-filters"{{ ' open' if advanced_filters_active or campus_error }}>
       <summary>More Filters{{ ' (Active)' if advanced_filters_active }}</summary>
       <div class="analytics-advanced-filters__content">
         <details class="campus-filter analytics-campus-filter"{{ ' open' if campus_error }}>
-          <summary>Live Campuses: {% if selected_campuses %}{{ selected_campuses|length }} {{ 'Excluded' if campus_mode == 'exclude' else 'Selected' }}{% else %}All{% endif %}</summary>
+          <summary><span class="campus-filter__label">Campus</span><span class="campus-filter__value">{% if selected_campuses %}{{ selected_campuses|length }} {{ 'excluded' if campus_mode == 'exclude' else 'selected' }}{% else %}All campuses{% endif %}</span></summary>
           <label class="field campus-filter__mode">Selection Mode<select name="campus_mode" aria-describedby="live-campus-help"><option value="include"{{ ' selected' if campus_mode == 'include' }}>Show Only Selected Campuses</option><option value="exclude"{{ ' selected' if campus_mode == 'exclude' }}>Exclude Selected Campuses</option></select></label>
           <p id="live-campus-help">No selection shows all campuses. Excluding campuses keeps unassigned activities. Historical reports and affiliation evidence use the separate historical campus selection in Analytics.</p>
           {% if campus_error %}<p class="campus-filter__error" role="alert">{{ campus_error }}</p>{% endif %}
@@ -32,11 +35,24 @@
       {% if key in request.args %}{% for value in request.args.getlist(key) %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}{% elif key in ['start_year', 'end_year', 'activity_type', 'award_year', 'campus_id'] %}<input type="hidden" name="{{ key }}" value="">{% endif %}
     {% endfor %}
     <div class="analytics-filter-actions">
-      <label class="field">Attention<select name="attention"><option value="">All Activity Records</option>{% for key, label in attention_labels.items() %}<option value="{{ key }}"{{ ' selected' if request.args.get('attention') == key }}>{{ label }}</option>{% endfor %}</select></label>
+      <p class="filter-result-count" role="status"><strong>{{ scope_count }}</strong> {{ 'activity' if scope_count == 1 else 'activities' }} in this scope</p>
       <button class="btn btn--primary" type="submit">Apply Filters</button>
-      <a class="btn btn--ghost" href="{{ url_for('director.director_dash', **dashboard_state) ~ '#cross-campus-comparison' if dashboard_filters else url_for('director.analytics') }}">Clear</a>
+      {% if active_filter_chips %}<a class="btn btn--ghost" href="{{ url_for('director.director_dash', **dashboard_state) ~ '#cross-campus-comparison' if dashboard_filters else url_for('director.analytics') }}">Clear All Filters</a>{% endif %}
     </div>
   </form>
+  {% if active_filter_chips %}
+    <ul class="filter-chips" aria-label="Applied Filters">
+      {% for chip in active_filter_chips %}
+        <li><a class="filter-chip" href="{{ url_for(request.endpoint, **chip.query) }}{{ scope_url_suffix }}" aria-label="Remove filter: {{ chip.label }}">{{ chip.label }}<span class="filter-chip__remove" aria-hidden="true">&times;</span></a></li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+  {% if not scope_count %}
+    <p class="empty-state filter-zero-state">
+      <strong>No activities match this scope.</strong>
+      {% if active_filter_chips %}Remove an applied filter above, or use Clear All Filters, to widen the results.{% else %}No activity records fall inside {{ period.label }}. Widen the date range to review other records.{% endif %}
+    </p>
+  {% endif %}
   <div class="dashboard-export-actions" data-tour-id="reports">
     <a class="btn btn--outline" href="{{ url_for('director.export_university_pdf', **live_query) }}">Export PDF</a>
     <a class="btn btn--outline" href="{{ url_for('director.export_university_csv', **live_query) }}">Export CSV</a>

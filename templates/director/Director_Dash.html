@@ -38,7 +38,7 @@
     <h2 id="comparison-title">Cross-Campus Comparison</h2>
     <p>Choose a report scope, review campus activity coverage, and open Analytics for participation charts and attendance outcomes.</p>
     {% include 'partials/university_report_filters.html' %}
-    <p class="scope-note">{{ live_scope|join(' · ') }}</p>
+    {% if not active_filter_chips %}<p class="scope-note">{{ live_scope|join(' · ') }}</p>{% endif %}
     <div class="panel__actions">
       <a class="btn btn--primary" href="{{ url_for('director.analytics', **live_navigation_query) }}#campusComparison">View Campus Comparison</a>
       <a class="btn btn--outline" href="{{ url_for('director.analytics', **live_navigation_query) }}#campus-outcomes">View Campus Outcomes</a>
