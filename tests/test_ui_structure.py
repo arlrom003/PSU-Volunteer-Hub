@@ -56,7 +56,7 @@ def test_mobile_sidebar_has_a_labeled_logout_action():
     styles = (ROOT / "static" / "styles" / "role-shell.css").read_text(encoding="utf-8")
 
     assert 'class="role-user__logout"' in sidebar
-    assert "Log out</span>" in sidebar
+    assert "Log Out</span>" in sidebar
     assert ".role-user__logout" in styles
     assert "@media (max-width: 767px)" in styles
 

@@ -76,7 +76,7 @@ body.sidebar-open {
 }
 
 .role-brand span,
-.role-user span {
+.role-user > span {
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -105,7 +105,8 @@ body.sidebar-open {
   margin-top: auto;
   padding-top: 16px;
   border-top: 1px solid var(--outline-variant);
-  display: flex;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
 }
@@ -130,20 +131,36 @@ body.sidebar-open {
   justify-content: center;
   min-width: 44px;
   min-height: 44px;
-  padding: 8px;
-  border: 0;
+  width: 100%;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--error);
+  border-radius: var(--control-radius);
   background: transparent;
-  color: var(--on-surface-variant);
+  color: var(--error);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
   text-decoration: none;
 }
 
-.role-user form { margin-left: auto; }
+.role-user form {
+  grid-column: 1 / -1;
+  margin: 0;
+  min-width: 0;
+}
 
-.role-user__logout:hover { background: var(--surface-container-low); }
+.role-user__logout:hover { background: var(--error-container); }
+
+.role-user__logout:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 3px;
+  background: var(--error-container);
+}
 
 .role-user__logout-label {
-  display: none;
+  display: inline;
 }
 
 .role-shell {
@@ -2059,28 +2076,7 @@ body:has(.activity-page) .flash--success { background: var(--primary); }
   }
 
   .role-user {
-    flex-wrap: wrap;
     flex-shrink: 0;
-  }
-
-  .role-user__logout {
-    width: 100%;
-    min-height: 44px;
-    margin: 6px 0 0;
-    gap: 8px;
-    border: 1px solid var(--error);
-    border-radius: var(--control-radius);
-    color: var(--error);
-    font-weight: 700;
-  }
-
-  .role-user__logout:hover,
-  .role-user__logout:focus-visible {
-    background: var(--error-container);
-  }
-
-  .role-user__logout-label {
-    display: inline;
   }
 
   .role-content {

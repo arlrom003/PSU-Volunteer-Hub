@@ -193,6 +193,9 @@ def create_app(config_name=None):
             return {'unread_notifications': unread}
         return {'unread_notifications': 0}
 
+    from app.pagination import page_url
+    app.jinja_env.globals['page_url'] = page_url
+
     from app.commands import register_commands
     register_commands(app)
 

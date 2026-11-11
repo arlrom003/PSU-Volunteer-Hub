@@ -206,7 +206,8 @@
   overflow-wrap: anywhere;
 }
 
-.attendance-picker__all {
+.attendance-picker__all,
+.cancellation-filter {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
@@ -216,9 +217,33 @@
   border-top: 1px solid var(--outline-variant);
 }
 
-.attendance-picker__all .field {
+.attendance-picker__all .field,
+.cancellation-filter .field {
   flex: 1 1 20rem;
   min-width: 0;
+  margin-bottom: 0;
+}
+
+.attendance-picker__all > p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.attendance-picker__all :is(.input, .select, .btn),
+.cancellation-filter :is(.select, .btn),
+.cancellation-status .btn {
+  min-height: 44px;
+}
+
+.attendance-filters :is(.input, .select),
+.cancellation-filter .select {
+  border-color: var(--on-surface-variant);
+}
+
+.attendance-filters :is(.input, .select, .btn):focus-visible,
+.cancellation-filter :is(.select, .btn):focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .attendance-state {

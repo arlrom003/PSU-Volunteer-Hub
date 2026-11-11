@@ -11,16 +11,18 @@ from PIL import Image, UnidentifiedImageError
 from werkzeug.utils import secure_filename
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, Response, abort, send_from_directory
 from flask_login import login_required, current_user
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
+from sqlalchemy import insert, update, case, or_
+from app.pagination import paginate
 from app.models import db
 from app.models.event import (ActivityCategory, Event, EventAnnouncement,
                               Registration, Attendance, Campus, Milestone,
-                              CancellationRequest, SdgGoal)
+                              CancellationRequest, SdgGoal, ExternalParticipant)
 from app.utils.decorators import role_required, roles_required
 from app.models.notification import Notification, notify_campus_coordinators
 from app.models.notification import notify
 from app.utils.audit import log_activity
-from app.models.user import SystemSetting
+from app.models.user import SystemSetting, User
 from app.recommendation.analytics import AnalyticsAggregator
 from app.dashboard import summarize_report, resolve_period, dashboard_evidence, consolidate_attention, annual_plan_summary
 from app.reports import (
@@ -301,12 +303,23 @@ def activity_calendar():
 @role_required('coordinator')
 def cancellation_requests():
     status = request.args.get('status', 'pending')
+    if status not in ('pending', 'approved', 'rejected', 'all'):
+        status = 'pending'
+    event_id = request.args.get('event_id', type=int)
+    selected_event = None
+    if request.args.get('event_id'):
+        selected_event = Event.query.filter_by(
+            id=event_id, campus_id=current_user.campus_id).first()
+        if selected_event is None:
+            abort(403)
     query = CancellationRequest.query.join(Registration).join(Event).filter(
         Event.campus_id == current_user.campus_id)
+    if selected_event:
+        query = query.filter(Registration.event_id == selected_event.id)
     if status in ('pending', 'approved', 'rejected'):
         query = query.filter(CancellationRequest.status == status)
     if request.method == 'POST':
-        cancellation = db.session.get(CancellationRequest, request.form.get('request_id', type=int))
+        cancellation = CancellationRequest.query.filter_by(id=request.form.get('request_id', type=int)).with_for_update().first()
         decision = request.form.get('decision')
         note = request.form.get('review_note', '').strip()
         if cancellation is None or cancellation.registration.event.campus_id != current_user.campus_id:
@@ -328,12 +341,21 @@ def cancellation_requests():
                        title=f'Cancellation request {decision}',
                        message=f'Your request for "{cancellation.registration.event.title}" was {decision}.',
                        notification_type=f'cancellation_{decision}',
-                       related_event_id=cancellation.registration.event_id)
+                       related_event_id=cancellation.registration.event_id, commit=False)
             db.session.commit()
             flash(f'Cancellation request {decision}.', 'success')
-        return redirect(url_for('coordinator.cancellation_requests', status=status))
+        return redirect(url_for('coordinator.cancellation_requests', status=status,
+                                event_id=event_id, page=request.args.get('page', 1, type=int)))
+    pagination = paginate(query.options(
+        joinedload(CancellationRequest.registration).joinedload(Registration.event),
+        joinedload(CancellationRequest.registration).joinedload(Registration.user),
+        joinedload(CancellationRequest.registration).joinedload(Registration.external_participant)
+    ).order_by(CancellationRequest.requested_at.asc(), CancellationRequest.id.asc()))
     return render_template('coordinator/cancellation_requests.html',
-                           requests=query.order_by(CancellationRequest.requested_at.asc(), CancellationRequest.id.asc()).all(),
+                           requests=pagination.items, pagination=pagination,
+                           events=Event.query.filter_by(campus_id=current_user.campus_id)
+                               .order_by(Event.date.desc(), Event.id.desc()).all(),
+                           selected_event=selected_event,
                            selected_status=status)
 
 
@@ -627,11 +649,20 @@ def publish_announcement(event_id):
 @login_required
 @role_required('coordinator')
 def attendance():
-    events = Event.query.filter_by(
-        campus_id=current_user.campus_id).order_by(Event.date.asc()).all()
     now = datetime.now()
-    today_events = [event for event in events if event.date.date() == now.date()]
-    future_events = [event for event in events if event.date.date() > now.date()][:3]
+    volunteer_search = request.args.get('volunteer_search', '').strip()
+    attendance_filter = request.args.get('attendance_status', '')
+    if attendance_filter not in ('', 'present', 'absent', 'excused', 'unmarked'):
+        attendance_filter = ''
+    campus_events = Event.query.filter_by(campus_id=current_user.campus_id)
+    search = request.args.get('activity_search', '').strip()
+    choices = campus_events
+    if search:
+        choices = choices.filter(Event.title.icontains(search, autoescape=True))
+    events = choices.order_by(Event.date.desc(), Event.id.desc()).limit(25).all() if request.method == 'GET' else []
+    tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    today_events = campus_events.filter(Event.date >= tomorrow - timedelta(days=1), Event.date < tomorrow).order_by(Event.date, Event.id).limit(6).all() if request.method == 'GET' else []
+    future_events = campus_events.filter(Event.date >= tomorrow).order_by(Event.date, Event.id).limit(3).all() if request.method == 'GET' else []
     quick_activities = [
         {'event': event, 'state': _attendance_state(event, now)}
         for event in [*today_events, *future_events]
@@ -639,21 +670,45 @@ def attendance():
     selected_event_id = request.args.get('event_id', type=int)
     selected_event = None
     registrations = []
-    if selected_event_id:
+    pagination = None
+    if selected_event_id and request.method == 'GET':
         selected_event = Event.query.filter_by(
             id=selected_event_id, campus_id=current_user.campus_id).first()
         if selected_event is None:
             abort(403)
-        registrations = Registration.query.filter(
+        if selected_event not in events:
+            events.append(selected_event)
+        roster = Registration.query.filter(
             Registration.event_id == selected_event.id,
             Registration.status != 'cancelled',
-        ).all()
+        )
+        if volunteer_search:
+            roster = roster.filter(or_(
+                Registration.user.has(or_(
+                    User.name.icontains(volunteer_search, autoescape=True),
+                    User.email.icontains(volunteer_search, autoescape=True),
+                    User.id_number.icontains(volunteer_search, autoescape=True))),
+                Registration.external_participant.has(or_(
+                    ExternalParticipant.name.icontains(volunteer_search, autoescape=True),
+                    ExternalParticipant.email.icontains(volunteer_search, autoescape=True),
+                    ExternalParticipant.id_number.icontains(volunteer_search, autoescape=True))),
+            ))
+        if attendance_filter == 'unmarked':
+            roster = roster.filter(~Registration.attendance_record.has())
+        elif attendance_filter:
+            roster = roster.filter(Registration.attendance_record.has(Attendance.status == attendance_filter))
+        pagination = paginate(roster.options(
+            joinedload(Registration.user), joinedload(Registration.external_participant),
+            joinedload(Registration.attendance_record)).order_by(Registration.id), per_page=15)
+        registrations = pagination.items
     if request.method == 'POST':
         event_id = request.form.get('event_id', type=int)
         reg_ids = request.form.getlist('registration_id')
         statuses = request.form.getlist('status')
+        if len(reg_ids) > 50:
+            abort(400)
         selected_event = Event.query.filter_by(
-            id=event_id, campus_id=current_user.campus_id).first()
+            id=event_id, campus_id=current_user.campus_id).populate_existing().with_for_update().first()
         if selected_event is None:
             abort(403)
         try:
@@ -667,7 +722,8 @@ def attendance():
             for registration in Registration.query.filter(
                 Registration.id.in_(registration_ids or [-1]),
                 Registration.event_id == selected_event.id,
-            ).all()
+                Registration.status != 'cancelled',
+            ).options(joinedload(Registration.attendance_record)).populate_existing().with_for_update().all()
         }
         if len(registrations_by_id) != len(registration_ids):
             abort(403)
@@ -676,6 +732,7 @@ def attendance():
             flash('Check-in is not open yet. It opens 30 minutes before the activity starts.', 'error')
             return redirect(url_for('coordinator.attendance', event_id=selected_event.id))
         activity_ended = now >= (selected_event.end_date or selected_event.date)
+        registration_updates, attendance_updates, attendance_inserts = [], [], []
         for i, reg_id in enumerate(reg_ids):
             reg = registrations_by_id[int(reg_id)]
             status = statuses[i] if i < len(statuses) else ''
@@ -683,18 +740,27 @@ def attendance():
                 continue
             if status not in {'present', 'absent', 'excused'}:
                 abort(400)
-            reg.status = 'completed' if status == 'present' and activity_ended else 'confirmed'
-            existing = Attendance.query.filter_by(
-                registration_id=reg.id).first()
+            registration_updates.append(dict(id=reg.id, status='completed' if status == 'present' and activity_ended else 'confirmed'))
+            existing = reg.attendance_record
             if existing:
-                existing.status = status
+                attendance_updates.append(dict(id=existing.id, status=status))
             else:
-                db.session.add(Attendance(registration_id=reg.id, user_id=reg.user_id,
-                               event_id=reg.event_id, status=status))
+                attendance_inserts.append(dict(registration_id=reg.id, user_id=reg.user_id,
+                                              event_id=reg.event_id, status=status))
+        for model, changes in ((Registration, registration_updates), (Attendance, attendance_updates)):
+            if changes:
+                values = {change['id']: change['status'] for change in changes}
+                db.session.execute(update(model).where(model.id.in_(list(values))).values(
+                    status=case(values, value=model.id)), execution_options={'synchronize_session': False})
+        if attendance_inserts:
+            db.session.execute(insert(Attendance).values(attendance_inserts))
         db.session.commit()
         flash('Attendance updated successfully!' if activity_ended else
               'Check-in saved. Save final attendance after the activity ends to confirm completion and certificate eligibility.', 'success')
-        return redirect(url_for('coordinator.attendance', event_id=event_id))
+        return redirect(url_for('coordinator.attendance', event_id=event_id,
+                                volunteer_search=volunteer_search, attendance_status=attendance_filter,
+                                activity_search=search,
+                                page=request.args.get('page', 1, type=int)))
     attendance_opens_at = selected_event.date - timedelta(minutes=30) if selected_event else None
     attendance_counts = {'registered': len(registrations), 'present': 0,
                          'absent': 0, 'excused': 0, 'unmarked': 0}
@@ -702,6 +768,8 @@ def attendance():
         status = registration.attendance_record.status if registration.attendance_record else 'unmarked'
         attendance_counts[status] += 1
     return render_template('coordinator/attendance_MnGmt.html', events=events,
+                           pagination=pagination, activity_search=search,
+                           volunteer_search=volunteer_search, attendance_filter=attendance_filter,
                            registrations=registrations, selected_event=selected_event,
                            quick_activities=quick_activities,
                            attendance_state=(_attendance_state(selected_event, now)

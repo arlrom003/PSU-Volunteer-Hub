@@ -1,3 +1,64 @@
 {% extends 'layouts/role_base.html' %}
+{% from 'partials/pagination.html' import pages with context %}
 {% block title %}Cancellation Requests · PSU Volunteer Hub{% endblock %}
-{% block content %}<header class="page-heading"><div><h1>Cancellation requests</h1><p>Review requests for activities in your campus.</p></div></header><nav class="button-row" aria-label="Request status">{% for status in ['pending','approved','rejected','all'] %}<a class="btn btn--sm {{ 'btn--primary' if selected_status == status else 'btn--ghost' }}" href="{{ url_for('coordinator.cancellation_requests', status=status) }}">{{ status|title }}</a>{% endfor %}</nav><section class="panel"><div class="registration-list">{% for request in requests %}<article class="registration-row"><div><strong>{{ request.registration.participant.name if request.registration.participant else 'External participant' }}</strong><small>{{ request.registration.event.title }} · {{ request.requested_at.strftime('%b %d, %Y %I:%M %p') }}</small><p><strong>{{ request.reason }}</strong>{% if request.details %}<br>{{ request.details }}{% endif %}</p></div><span class="badge">{{ request.status|title }}</span>{% if request.status == 'pending' %}<form method="post" class="stack">{% include 'partials/csrf_field.html' %}<input type="hidden" name="request_id" value="{{ request.id }}"><label class="field">Review note<textarea class="input" name="review_note" rows="2"></textarea></label><div class="button-row"><button class="btn btn--danger" name="decision" value="rejected">Reject</button><button class="btn btn--primary" name="decision" value="approved">Approve</button></div></form>{% else %}<small>{{ request.review_note or 'No reviewer note.' }}</small>{% endif %}</article>{% else %}<div class="empty-state">No {{ selected_status }} cancellation requests for your campus.</div>{% endfor %}</div></section>{% endblock %}
+{% block content %}
+  <header class="page-heading">
+    <div><h1>Cancellation Requests</h1><p>Review requests for activities in your campus.</p></div>
+  </header>
+  <section class="panel" aria-labelledby="cancellation-activity-heading">
+    <h2 id="cancellation-activity-heading">Select Activity</h2>
+    <form class="cancellation-filter" method="get" autocomplete="off">
+      <input type="hidden" name="status" value="{{ selected_status }}">
+      <div class="field">
+        <label for="cancellation-event">Campus Activity</label>
+        <select class="select" id="cancellation-event" name="event_id">
+          <option value="">All Campus Activities</option>
+          {% for event in events %}
+            <option value="{{ event.id }}"{{ ' selected' if selected_event and selected_event.id == event.id }}>{{ event.date.strftime('%b %d, %Y') }} · {{ event.title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn--outline" type="submit">Show Requests</button>
+      {% if selected_event %}
+        <a class="btn btn--outline" href="{{ url_for('coordinator.cancellation_requests', status=selected_status) }}">All Activities</a>
+      {% endif %}
+    </form>
+  </section>
+  <nav class="button-row cancellation-status" aria-label="Request status">
+    {% for status in ['pending', 'approved', 'rejected', 'all'] %}
+      <a class="btn {{ 'btn--primary' if selected_status == status else 'btn--ghost' }}" href="{{ url_for('coordinator.cancellation_requests', status=status, event_id=selected_event.id if selected_event else none) }}"{% if selected_status == status %} aria-current="page"{% endif %}>{{ status|title }}</a>
+    {% endfor %}
+  </nav>
+  <section class="panel" aria-labelledby="cancellation-results-heading">
+    <h2 id="cancellation-results-heading">{{ selected_event.title if selected_event else 'All Campus Activities' }}</h2>
+    <p>{{ pagination.total }} {{ 'request' if pagination.total == 1 else 'requests' }} · {{ selected_status|title }}</p>
+    <div class="registration-list">
+      {% for request in requests %}
+        <article class="registration-row">
+          <div>
+            <strong>{{ request.registration.participant.name if request.registration.participant else 'External participant' }}</strong>
+            <small>{{ request.registration.event.title }} · {{ request.requested_at.strftime('%b %d, %Y %I:%M %p') }}</small>
+            <p><strong>{{ request.reason }}</strong>{% if request.details %}<br>{{ request.details }}{% endif %}</p>
+          </div>
+          <span class="badge">{{ request.status|title }}</span>
+          {% if request.status == 'pending' %}
+            <form method="post" class="stack">
+              {% include 'partials/csrf_field.html' %}
+              <input type="hidden" name="request_id" value="{{ request.id }}">
+              <label class="field">Review Note<textarea class="input" name="review_note" rows="2"></textarea></label>
+              <div class="button-row">
+                <button class="btn btn--danger" name="decision" value="rejected">Reject</button>
+                <button class="btn btn--primary" name="decision" value="approved">Approve</button>
+              </div>
+            </form>
+          {% else %}
+            <small>{{ request.review_note or 'No reviewer note.' }}</small>
+          {% endif %}
+        </article>
+      {% else %}
+        <div class="empty-state">No {{ selected_status if selected_status != 'all' else '' }} cancellation requests {{ 'for this activity' if selected_event else 'for your campus' }}. {% if selected_event %}Choose another activity or select All Campus Activities to view other requests.{% endif %}</div>
+      {% endfor %}
+    </div>
+    {{ pages(pagination, 'Cancellation request pages') }}
+  </section>
+{% endblock %}

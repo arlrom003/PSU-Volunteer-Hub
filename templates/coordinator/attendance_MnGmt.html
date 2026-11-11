@@ -1,4 +1,5 @@
 {% extends 'layouts/role_base.html' %}
+{% from 'partials/pagination.html' import pages with context %}
 {% block title %}Attendance · PSU Volunteer Hub{% endblock %}
 {% block header_title %}Coordinator Console{% endblock %}
 {% block header_subtitle %}Attendance management{% endblock %}
@@ -38,6 +39,9 @@
       <div class="empty-state">No activities are scheduled for today or the next three activity dates. Choose a past activity below if you need to review its attendance.</div>
     {% endif %}
     <form class="attendance-picker__all" method="get" autocomplete="off">
+      <label class="field">Find Campus Activity<input class="input" type="search" name="activity_search" value="{{ activity_search }}" placeholder="e.g., Coastal cleanup…"></label>
+      <button class="btn btn--outline" type="submit">Search Activities</button>
+      <p>Showing up to 25 matching activities. Search to find older records.</p>
       <label class="field" for="event_id">
         <span class="field__label">All Campus Activities</span>
         <select class="select" id="event_id" name="event_id">
@@ -66,6 +70,30 @@
     </section>
   {% endif %}
 
+  {% if selected_event %}
+    <section class="panel" aria-labelledby="volunteer-search-heading">
+      <h2 id="volunteer-search-heading">Find Volunteers</h2>
+      <form class="attendance-picker__all attendance-filters" method="get" role="search" aria-label="Find registered volunteers" autocomplete="off">
+        <input type="hidden" name="event_id" value="{{ selected_event.id }}">
+        <input type="hidden" name="activity_search" value="{{ activity_search }}">
+        <label class="field">Search Volunteers
+          <input class="input" type="search" name="volunteer_search" value="{{ volunteer_search }}" autocomplete="off" placeholder="Name, email, or ID number…">
+        </label>
+        <label class="field">Attendance Status
+          <select class="select" name="attendance_status">
+            {% for value, label in [('', 'All Statuses'), ('unmarked', 'Not Marked'), ('present', 'Present'), ('absent', 'Absent'), ('excused', 'Excused')] %}
+              <option value="{{ value }}"{{ ' selected' if attendance_filter == value }}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button class="btn btn--outline" type="submit">Search Volunteers</button>
+        {% if volunteer_search or attendance_filter %}
+          <a class="btn btn--outline" href="{{ url_for('coordinator.attendance', event_id=selected_event.id, activity_search=activity_search) }}">Clear Filters</a>
+        {% endif %}
+      </form>
+    </section>
+  {% endif %}
+
   <form class="panel attendance-workspace" method="post" autocomplete="off" data-attendance-workspace>
     {% include 'partials/csrf_field.html' %}
     <input type="hidden" name="event_id" value="{{ selected_event.id if selected_event else '' }}">
@@ -74,10 +102,11 @@
         <h2>Registered Volunteers</h2>
         {% if selected_event %}<p>Review each participant before saving attendance for {{ selected_event.title }}.</p>{% endif %}
       </div>
-      <span class="badge badge--neutral">{{ attendance_counts.registered }} registered</span>
+      <span class="badge badge--neutral">{% if pagination %}{{ attendance_counts.registered }} on this page · {{ pagination.total }} {{ 'matching volunteers' if volunteer_search or attendance_filter else 'registered' }}{% else %}0 registered{% endif %}</span>
     </header>
 
     {% if selected_event %}
+      <p>Counts and bulk actions apply to this page. Save changes before changing pages.</p>
       <section class="attendance-summary" aria-label="Attendance status summary">
         {% for key, label in [('present', 'Present'), ('absent', 'Absent'), ('excused', 'Excused'), ('unmarked', 'Not Marked')] %}
           <div class="attendance-summary__item">
@@ -121,7 +150,7 @@
               </td>
             </tr>
           {% else %}
-            <tr><td colspan="2"><div class="empty-state">{{ 'No active registrations for this activity. Add an external volunteer if a walk-in participant needs to be recorded.' if selected_event else 'Choose an activity to view and record attendance.' }}</div></td></tr>
+            <tr><td colspan="2"><div class="empty-state">{% if selected_event and (volunteer_search or attendance_filter) %}No volunteers match{% if volunteer_search %} “{{ volunteer_search }}”{% endif %} with the selected attendance status. Try another name, email, or ID number, or clear the filters.{% else %}{{ 'No active registrations for this activity. Add an external volunteer if a walk-in participant needs to be recorded.' if selected_event else 'Choose an activity to view and record attendance.' }}{% endif %}</div></td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -132,5 +161,6 @@
       </div>
     {% endif %}
   </form>
+  {{ pages(pagination, 'Attendance participant pages') }}
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='scripts/attendance-workspace.js') }}"></script>{% endblock %}

@@ -1,0 +1,9 @@
+{% macro pages(pagination, label='List pages', parameter='page', anchor=none) -%}
+{% if pagination and pagination.pages > 1 %}
+<nav class="goal-pagination" aria-label="{{ label }}">
+  {% if pagination.has_prev %}<a class="btn btn--outline" rel="prev" href="{{ page_url(pagination.prev_num, parameter, anchor) }}">Previous Page</a>{% endif %}
+  <span aria-current="page">Page {{ pagination.page }} of {{ pagination.pages }} · {{ pagination.total }} records</span>
+  {% if pagination.has_next %}<a class="btn btn--outline" rel="next" href="{{ page_url(pagination.next_num, parameter, anchor) }}">Next Page</a>{% endif %}
+</nav>
+{% endif %}
+{%- endmacro %}
