@@ -156,7 +156,9 @@ def test_factory_handles_user_loader_failure_and_keeps_assets_available(monkeypa
     monkeypatch.setattr(db.session,'get',get)
     response = client.get('/coordinator_dash')
     assert response.status_code == 500 and b'PRIVATE' not in response.data
-    get.assert_called_once_with(User,123)
+    assert get.call_count == 1
+    assert get.call_args.args == (User,123)
+    assert get.call_args.kwargs['options']
     get.reset_mock()
     assert client.get('/static/styles/errors.css').status_code == 200
     assert client.get('/does-not-exist').status_code == 404
@@ -171,6 +173,7 @@ def test_debugger_setting_is_development_only(monkeypatch,environment,enabled,pr
     monkeypatch.setenv('DEV_ERROR_DEBUGGER',enabled)
     for config in (DevelopmentConfig,ProductionConfig):
         monkeypatch.setattr(config,'SQLALCHEMY_DATABASE_URI','sqlite:///:memory:')
+    monkeypatch.setattr(ProductionConfig,'SQLALCHEMY_ENGINE_OPTIONS',{})
     monkeypatch.setattr(ProductionConfig,'SECRET_KEY','isolated-error-config-test')
     monkeypatch.setattr(db,'create_all',lambda:None)
     for name in ['_seed_campuses','_seed_interests_skills','_seed_sdgs','_seed_events','_seed_users']:

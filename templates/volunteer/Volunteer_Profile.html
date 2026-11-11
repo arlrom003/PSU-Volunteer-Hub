@@ -1,5 +1,6 @@
 {% extends 'layouts/role_base.html' %}
 {% from 'partials/dashboard_ui.html' import heading, metric %}
+{% from 'partials/password_feedback.html' import password_feedback %}
 {% set active_page = "profile" %}
 {% block title %}Profile | PSU Volunteer Hub{% endblock %}
 {% block header_title %}Volunteer profile{% endblock %}
@@ -34,7 +35,7 @@
             </dd>
           </div>
         </dl>
-        <p class="help-text">Account details are read-only on this screen.</p>
+        <p class="help-text">Manage your name, campus, and password below.</p>
       </div>
       <div class="profile-photo-controls">
         <label for="profile-image">Change profile photo</label>
@@ -60,6 +61,61 @@
           </form>
         {% endif %}
       </div>
+      <div class="profile-account-settings">
+        {% for section, label in [('name', 'Change name'), ('campus', 'Change campus'), ('password', 'Change password')] %}
+          {% set section_errors = account_errors if account_section == section else {} %}
+          <details id="change-{{ section }}" class="profile-account-section" {% if section_errors %}open{% endif %}>
+            <summary>{{ label }}</summary>
+            <form method="post" action="{{ url_for('volunteer.change_' ~ section) }}" data-profile-form>
+              {% include 'partials/csrf_field.html' %}
+              {% if section_errors %}
+                <div class="profile-error" role="alert" tabindex="-1" data-profile-errors>
+                  <p>{{ section_errors.get('save', 'Changes were not saved. Check the fields below.') }}</p>
+                  <ul>{% for key, message in section_errors.items() if key != 'save' %}<li><a href="#account-{{ key }}">{{ message }}</a></li>{% endfor %}</ul>
+                </div>
+              {% endif %}
+              {% if section == 'name' %}
+                <label for="account-name">Full name</label>
+                <input class="input" id="account-name" name="name" value="{{ account_values.name }}" maxlength="100" required autocomplete="name"
+                  {% if section_errors.name %}aria-invalid="true" aria-describedby="account-name-error"{% endif %}>
+                {% if section_errors.name %}<p id="account-name-error" class="profile-error">{{ section_errors.name }}</p>{% endif %}
+              {% elif section == 'campus' %}
+                <p class="help-text">Your campus changes immediately. Previous participation stays with the activity’s host campus.</p>
+                <label for="account-campus_id">Campus</label>
+                <select class="select" id="account-campus_id" name="campus_id" required autocomplete="off"
+                  {% if section_errors.campus_id %}aria-invalid="true" aria-describedby="account-campus_id-error"{% endif %}>
+                  <option value="">Select your campus</option>
+                  {% for campus in campuses %}<option value="{{ campus.id }}" {% if campus.id|string == account_values.campus_id %}selected{% endif %}>{{ campus.name }}</option>{% endfor %}
+                </select>
+                {% if section_errors.campus_id %}<p id="account-campus_id-error" class="profile-error">{{ section_errors.campus_id }}</p>{% endif %}
+                <label for="account-college_affiliation">College affiliation</label>
+                <select class="select" id="account-college_affiliation" name="college_affiliation" required autocomplete="off"
+                  {% if section_errors.college_affiliation %}aria-invalid="true" aria-describedby="account-college_affiliation-error"{% endif %}>
+                  <option value="">Select your college</option>
+                  {% for college in affiliation_options.get(account_values.campus_id, []) %}<option value="{{ college }}" {% if college == account_values.college_affiliation %}selected{% endif %}>{{ college }}</option>{% endfor %}
+                </select>
+                {% if section_errors.college_affiliation %}<p id="account-college_affiliation-error" class="profile-error">{{ section_errors.college_affiliation }}</p>{% endif %}
+                <noscript><p class="help-text">After changing campus, save once to load its colleges, then select your college and save again.</p></noscript>
+              {% else %}
+                <p class="help-text" id="password-help">Use at least {{ password_min }} characters with uppercase, lowercase, a number, and a special character. This browser stays signed in; your other sessions will be signed out.</p>
+                {% for key, field_label, autocomplete in [('current_password', 'Current password', 'current-password'), ('new_password', 'New password', 'new-password'), ('password_confirmation', 'Confirm new password', 'new-password')] %}
+                  <label for="account-{{ key }}">{{ field_label }}</label>
+                  <div class="profile-password-input">
+                    <input class="input" id="account-{{ key }}" name="{{ key }}" type="password" required autocomplete="{{ autocomplete }}"
+                      {% if key != 'current_password' %}minlength="{{ password_min }}"{% endif %}
+                      aria-describedby="password-help{% if section_errors.get(key) %} account-{{ key }}-error{% endif %}"
+                      {% if section_errors.get(key) %}aria-invalid="true"{% endif %}>
+                    <button class="btn btn--ghost" type="button" data-profile-password="account-{{ key }}" aria-controls="account-{{ key }}" aria-label="Show {{ field_label|lower }}" aria-pressed="false" hidden>Show</button>
+                  </div>
+                  {% if section_errors.get(key) %}<p id="account-{{ key }}-error" class="profile-error">{{ section_errors[key] }}</p>{% endif %}
+                {% endfor %}
+                {{ password_feedback('account-new_password', 'account-password_confirmation', password_min) }}
+              {% endif %}
+              <div><button class="btn btn--primary" type="submit">{{ 'Change password' if section == 'password' else 'Save ' ~ section }}</button></div>
+            </form>
+          </details>
+        {% endfor %}
+      </div>
     </section>
     <section aria-label="Participation summary" class="summary-strip">
       {{ metric('Registrations', user_stats.total_activities, 'All your registration records, including pending and cancelled registrations. This is not a completed-service count.') }}
@@ -77,6 +133,7 @@
       {% if errors %}<p class="profile-error" role="alert">{{ errors.save or 'Profile was not saved. Review the highlighted choices. If you chose a photo, choose it again.' }}</p>{% endif %}
       <form
         id="profile-form"
+        data-profile-form
         method="post"
         enctype="multipart/form-data"
         action="{{ url_for('volunteer.profile_page') }}"
@@ -199,4 +256,9 @@
       </div>
     </section>
   </div>
+{% endblock %}
+{% block scripts %}
+  <script type="application/json" id="profile-colleges">{{ affiliation_options|tojson }}</script>
+  <script src="{{ url_for('static', filename='scripts/profile-settings.js') }}"></script>
+  <script src="{{ url_for('static', filename='scripts/password-feedback.js') }}"></script>
 {% endblock %}

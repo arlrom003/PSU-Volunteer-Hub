@@ -7,6 +7,14 @@ milestones, campuses, recommendation logs, and analytics summaries.
 from datetime import datetime
 from app.models import db
 from app.models.user import Skill
+from sqlalchemy.orm import query_expression, with_expression
+
+
+def capacity_query(query):
+    count = db.select(db.func.count(Registration.id)).where(
+        Registration.event_id == Event.id, Registration.status.in_(('confirmed', 'completed'))
+    ).correlate(Event).scalar_subquery()
+    return query.options(with_expression(Event.active_registration_count, count)).populate_existing()
 
 # Junction table for event required skills (3NF)
 event_skills = db.Table(
@@ -40,6 +48,8 @@ class Event(db.Model):
     Represents a volunteer activity/event posted by coordinators.
     """
     __tablename__ = 'events'
+    active_registration_count = query_expression()
+    viewer_registration_status = query_expression()
 
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
@@ -125,8 +135,9 @@ class Event(db.Model):
         """Return number of available slots (0 if unlimited or full)."""
         if self.slots <= 0:
             return 0
-        confirmed = sum(1 for r in self.registrations if r.status in (
-            'confirmed', 'completed'))
+        confirmed = self.active_registration_count
+        if confirmed is None:
+            confirmed = sum(1 for r in self.registrations if r.status in ('confirmed', 'completed'))
         return max(0, self.slots - confirmed)
 
 

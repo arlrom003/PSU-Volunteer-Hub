@@ -989,6 +989,7 @@ body:has(.activity-page) .flash--success { background: var(--primary); }
 .goal-hero > strong { font-size: 1.2rem; }
 .goal-hero > span:not(.goal-hero__value), .goal-plan > span { font-size: .9rem; }
 .goal-hero__cue { display: inline-flex; align-items: center; min-height: 44px; color: var(--primary); font-weight: 700; text-decoration: underline; text-underline-offset: 4px; }
+.goal-hero__cue.btn { align-self: flex-start; max-width: 100%; white-space: normal; text-decoration: none; }
 .goal-hero:hover .goal-hero__cue, .goal-plan:hover { color: var(--primary-dark); text-decoration-thickness: 2px; }
 .goal-plan-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 .goal-plan { display: flex; flex-direction: column; gap: 6px; padding-block: 10px; color: var(--primary-dark); text-decoration: none; border-radius: var(--control-radius); }
@@ -996,6 +997,7 @@ body:has(.activity-page) .flash--success { background: var(--primary); }
 .goal-plan:hover > span:first-child { text-decoration: underline; text-underline-offset: 4px; }
 .goal-plan > strong { font-size: 2.25rem; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .goal-plan small { font-size: 1.1rem; color: var(--on-surface-variant); font-weight: 500; }
+.goal-plan > .goal-plan__meaning { font-size: .75rem; line-height: 1.4; }
 .goal-plan > span:last-child { color: var(--on-surface-variant); }
 .goal-participation { padding-left: 32px; border-left: 1px solid var(--outline-variant); min-width: 0; }
 .goal-participation summary { cursor: pointer; list-style: none; display: flex; flex-direction: column; gap: 8px; border-radius: var(--control-radius); }
@@ -1036,6 +1038,7 @@ body:has(.activity-page) .flash--success { background: var(--primary); }
 .goal-university > div:nth-child(2) { font-variant-numeric: tabular-nums; }
 .goal-university p { margin: 6px 0 0; color: var(--on-surface-variant); line-height: 1.5; }
 .goal-university .btn { min-height: 44px; white-space: normal; }
+.goal-university__actions { flex-basis: 100%; }
 .goal-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 14px 0; margin-top: 16px; border-block: 2px solid var(--gold); }
 .goal-preview strong { color: var(--primary-dark); }
 .goal-detail-page { max-width: 1280px; }

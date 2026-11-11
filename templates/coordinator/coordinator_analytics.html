@@ -1,4 +1,5 @@
 {% extends 'layouts/role_base.html' %}
+{% from 'partials/pagination.html' import pages with context %}
 {% from 'partials/info_tip.html' import info_tip %}
 {% from 'partials/dashboard_ui.html' import heading, metric, chart, period_control, performance_metrics, findings, annual_plan_summary with context %}
 {% set active_page = "analytics" %}
@@ -225,13 +226,13 @@
   </details>
 
   {% endset %}
-  <details class="analytics-disclosure" id="detailed-report"{{ ' open' if request.args.get('event_id') or request.args.get('attention') }}>
+  <details class="analytics-disclosure" id="detailed-report"{{ ' open' if request.args.get('event_id') or request.args.get('attention') or request.args.get('page') }}>
     <summary><span>Detailed Activity Report</span><small>Activity attendance rates and report rows matching the filters and exports.</small></summary>
     <div class="analytics-disclosure__content">
   {{ activity_performance }}
   <section class="panel" id="decision-records">
     <span id="filtered-report"></span>
-    {{ heading('Filtered Activity Report', 'Activity-level counts matching the selected activity name, campus report dates, and category. PDF and CSV downloads contain these same rows.', 'Restricted to ' ~ campus_name ~ ' Campus') }}
+    {{ heading('Filtered Activity Report', 'Activity-level counts matching the selected filters. Downloads include all matching activities across every page.', 'Restricted to ' ~ campus_name ~ ' Campus') }}
     <p class="table-scroll__hint" id="filtered-campus-report-scroll-hint">Swipe horizontally to view remaining columns.</p>
     <div
       class="table-scroll table-scroll--report"
@@ -281,6 +282,7 @@
       </table>
     </div>
 
+    {{ pages(pagination, 'Campus report pages', anchor='decision-records') }}
   </section>
     </div>
   </details>

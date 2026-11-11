@@ -12,7 +12,7 @@ All authorization/scoping decisions happen in the calling route:
 """
 from datetime import datetime, timedelta
 from sqlalchemy import case, func
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload, selectinload, load_only
 
 from app.models import db
 from app.models.event import Event, Registration, Attendance, Campus, SdgGoal
@@ -84,7 +84,8 @@ def report_invalid():
 
 def build_events_report(campus_id=None, start_date=None, end_date=None,
                         category=None, sex=None, sdg_id=None, activity_name=None,
-                        campus_ids=None, attention=None, now=None, event_id=None, event_ids=None):
+                        campus_ids=None, attention=None, now=None, event_id=None, event_ids=None,
+                        include_sdgs=True, limit=None, offset=0, include_summary=True):
     """Return (rows, summary) for the filtered event dataset.
 
     campus_id=None means all campuses. Coordinators must pass their own
@@ -128,9 +129,6 @@ def build_events_report(campus_id=None, start_date=None, end_date=None,
         query = query.filter(Event.sdgs.any(SdgGoal.id == sdg_id))
 
     event_ids = query.with_entities(Event.id).statement
-    events = query.options(joinedload(Event.campus), selectinload(Event.sdgs)).order_by(
-        Event.date.desc(), Event.id.desc()).all()
-
     sex_scope = db.true()
     if sex in ('male', 'female', 'prefer_not_to_say'):
         sex_scope = User.sex == sex
@@ -143,27 +141,51 @@ def build_events_report(campus_id=None, start_date=None, end_date=None,
     def count_when(condition):
         return func.count(case((condition, 1)))
 
-    registration_counts = {
-        row[0]: row[1:] for row in db.session.query(
+    registration_counts = db.session.query(
             Registration.event_id,
-            count_when(valid),
-            count_when(valid & Registration.user_id.isnot(None)),
-            count_when(valid & Registration.external_participant_id.isnot(None)),
-            count_when((Registration.status == 'completed') & sex_scope),
-            count_when(Registration.status == 'cancelled'),
-            count_when(attendance_eligible & Attendance.id.is_(None)),
+            count_when(valid).label('registrations'),
+            count_when(valid & Registration.user_id.isnot(None)).label('psu'),
+            count_when(valid & Registration.external_participant_id.isnot(None)).label('external'),
+            count_when((Registration.status == 'completed') & sex_scope).label('completed'),
+            count_when(Registration.status == 'cancelled').label('cancelled'),
+            count_when(attendance_eligible & Attendance.id.is_(None)).label('missing'),
             count_when(attendance_eligible & (Attendance.status == 'present') &
-                       ((Registration.status != 'completed') | Registration.status.is_(None))),
-            count_when(valid & (Attendance.status == 'present')),
+                       ((Registration.status != 'completed') | Registration.status.is_(None))).label('unconfirmed'),
+            count_when(valid & (Attendance.status == 'present')).label('outcome'),
+            count_when(valid & (Attendance.status == 'present') & (Registration.status == 'completed')).label('verified_completed'),
         ).outerjoin(User, Registration.user_id == User.id).outerjoin(
             Attendance, Attendance.registration_id == Registration.id).filter(
-            Registration.event_id.in_(event_ids)).group_by(Registration.event_id).all()
-    }
-    attendance_counts = dict(db.session.query(
-        Attendance.event_id, func.count(Attendance.id)).outerjoin(
+            Registration.event_id.in_(event_ids)).group_by(Registration.event_id).subquery()
+    attendance_counts = db.session.query(
+        Attendance.event_id, func.count(Attendance.id).label('attended')).outerjoin(
         User, Attendance.user_id == User.id).filter(
         Attendance.event_id.in_(event_ids), Attendance.status == 'present',
-        sex_scope).group_by(Attendance.event_id).all())
+        sex_scope).group_by(Attendance.event_id).subquery()
+    columns = [func.coalesce(column, 0) for column in list(registration_counts.c)[1:]]
+    data_query = query.outerjoin(registration_counts, registration_counts.c.event_id == Event.id).outerjoin(
+        attendance_counts, attendance_counts.c.event_id == Event.id)
+    sql_ended = func.coalesce(Event.end_date, Event.date) <= now
+    sql_complete = sql_ended & (columns[5] == 0) & (columns[6] == 0)
+    if attention == 'pending_attendance':
+        data_query = data_query.filter(sql_ended & ~sql_complete)
+    elif attention == 'low_attendance':
+        data_query = data_query.filter(sql_complete, columns[0] > 0, columns[7] * 4 < columns[0] * 3)
+    elif attention == 'missed_targets':
+        data_query = data_query.filter(sql_complete, Event.target_participants > 0,
+                                       columns[7] < Event.target_participants)
+    events_query = data_query.add_columns(
+        *columns, func.coalesce(attendance_counts.c.attended, 0)).options(
+        load_only(Event.title, Event.date, Event.end_date, Event.campus_id, Event.category, Event.target_participants),
+        joinedload(Event.campus)
+    ).order_by(Event.date.desc(), Event.id.desc())
+    if include_sdgs:
+        events_query = events_query.options(selectinload(Event.sdgs).load_only(SdgGoal.number))
+    if limit is not None:
+        events_query = events_query.offset(max(0, offset)).limit(limit + (1 if include_summary and not offset else 0))
+    events = events_query.all()
+    complete_scope = limit is None or (not offset and len(events) <= limit)
+    if limit is not None:
+        events = events[:limit]
 
     rows = []
     total_reg = 0
@@ -174,10 +196,7 @@ def build_events_report(campus_id=None, start_date=None, end_date=None,
     total_cancelled = 0
     total_target = 0
 
-    for e in events:
-        (reg, psu, external, completed, cancelled, missing, unconfirmed,
-         outcome_attended) = registration_counts.get(e.id, (0,) * 8)
-        attended = attendance_counts.get(e.id, 0)
+    for e, reg, psu, external, completed, cancelled, missing, unconfirmed, outcome_attended, verified_completed, attended in events:
         target = e.target_participants
         ended = now >= (e.end_date or e.date)
         complete = ended and not missing and not unconfirmed
@@ -201,12 +220,13 @@ def build_events_report(campus_id=None, start_date=None, end_date=None,
             'date': e.date,
             'campus': campus_name,
             'category': e.category or 'General',
-            'sdgs': ', '.join(f'SDG {goal.number}' for goal in e.sdgs) or 'Not tagged',
+            'sdgs': (', '.join(f'SDG {goal.number}' for goal in e.sdgs) or 'Not tagged') if include_sdgs else 'Not tagged',
             'registrations': reg,
             'psu_registrations': psu,
             'external_registrations': external,
             'attended': attended,
             'completed': completed,
+            'verified_completed': verified_completed,
             'cancelled': cancelled,
             'target_participants': target,
             'completion_percentage': round(outcome_attended / target * 100, 1)
@@ -230,7 +250,28 @@ def build_events_report(campus_id=None, start_date=None, end_date=None,
         'total_cancelled': total_cancelled,
         'total_target_participants': total_target,
     }
+    if include_summary and not complete_scope:
+        totals = data_query.with_entities(func.count(Event.id), *[
+            func.coalesce(func.sum(column), 0) for column in
+            (columns[0], columns[1], columns[2], func.coalesce(attendance_counts.c.attended, 0),
+             columns[3], columns[4], func.coalesce(Event.target_participants, 0))]).one()
+        summary = dict(zip(('event_count', 'total_registrations', 'total_psu', 'total_external',
+                            'total_attended', 'total_completed', 'total_cancelled', 'total_target_participants'), totals))
     return rows, summary
+
+
+def batched_events_report(**scope):
+    """Return a full-scope summary and an iterator that fetches 1,000 detail rows at a time."""
+    batch, summary = build_events_report(**scope, limit=1000)
+    def records():
+        current, offset = batch, 0
+        while current:
+            yield from current
+            if offset + len(current) >= summary['event_count']:
+                break
+            offset += 1000
+            current, _ = build_events_report(**scope, limit=1000, offset=offset, include_summary=False)
+    return records(), summary
 
 
 def _build_meta(title, scope, start_date, end_date, category,

@@ -56,14 +56,17 @@ def guidance_content(note):
 @notifications_bp.route('/notifications')
 @login_required
 def list_notifications():
-    notes = (Notification.query
+    from app.pagination import paginate
+    from app.performance import request_value
+    pagination = paginate(Notification.query
              .options(joinedload(Notification.event))
              .filter_by(user_id=current_user.id)
-             .order_by(Notification.created_at.desc())
-             .all())
-    unread = sum(1 for n in notes if not n.is_read)
+             .order_by(Notification.created_at.desc(), Notification.id.desc()))
+    notes = pagination.items
+    unread = request_value(('unread', current_user.id), lambda: Notification.query.filter_by(
+        user_id=current_user.id, is_read=False).count())
     return render_template('notifications/list.html',
-                           notifications=notes, unread=unread,
+                           notifications=notes, unread=unread, pagination=pagination,
                            guidance_content={note.id: guidance_content(note) for note in notes})
 
 

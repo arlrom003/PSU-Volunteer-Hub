@@ -1,4 +1,5 @@
 {% extends 'layouts/role_base.html' %}
+{% from 'partials/pagination.html' import pages with context %}
 {% block title %}Notifications | PSU Volunteer Hub{% endblock %}
 {% block header_title %}Notifications{% endblock %}
 {% block header_subtitle %}Your recent activity updates{% endblock %}
@@ -44,5 +45,6 @@
         <div class="empty-state">You have no notifications yet.</div>
       {% endfor %}
     </div>
+    {{ pages(pagination, 'Notification pages') }}
   </section>
 {% endblock %}

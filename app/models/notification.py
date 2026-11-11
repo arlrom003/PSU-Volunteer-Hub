@@ -35,7 +35,7 @@ class Notification(db.Model):
         return f'<Notification {self.id} user={self.user_id} type={self.notification_type}>'
 
 
-def notify(user_id, title, message, notification_type=None, related_event_id=None):
+def notify(user_id, title, message, notification_type=None, related_event_id=None, commit=True):
     """Create a notification row for an authenticated user."""
     note = Notification(
         user_id=user_id,
@@ -45,18 +45,21 @@ def notify(user_id, title, message, notification_type=None, related_event_id=Non
         related_event_id=related_event_id,
     )
     db.session.add(note)
-    db.session.commit()
+    if commit:
+        db.session.commit()
     return note
 
 
 def notify_campus_coordinators(campus_id, title, message,
-                               notification_type=None, related_event_id=None):
+                               notification_type=None, related_event_id=None, commit=True):
     """Notify every coordinator assigned to the given campus (conservative
     trigger tied to an existing system action)."""
     from app.models.user import User
-    coordinators = User.query.filter_by(
+    coordinators = db.session.query(User.id).filter_by(
         role='coordinator', campus_id=campus_id).all()
     for coordinator in coordinators:
         notify(coordinator.id, title, message,
                notification_type=notification_type,
-               related_event_id=related_event_id)
+               related_event_id=related_event_id, commit=False)
+    if commit:
+        db.session.commit()

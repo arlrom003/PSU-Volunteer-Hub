@@ -106,7 +106,7 @@ def admin_dash():
     else:
         page_query = AuditLog.query.options(joinedload(AuditLog.actor)).order_by(
             AuditLog.created_at.desc(), AuditLog.id.desc())
-    pagination = page_query.paginate(page=page, per_page=5, error_out=False)
+    pagination = page_query.paginate(page=page, per_page=25, error_out=False)
     if page > max(pagination.pages, 1):
         return redirect(url_for('admin.admin_dash', tab=active_tab, campus_id=campus_id,
                                 search=search, role=role, college_affiliation=affiliation,
@@ -133,8 +133,8 @@ def admin_dash():
     server_status = {'database': database_status}
     campuses = campus_query().order_by(Campus.name).all()
     category_page = max(request.args.get('category_page', 1, type=int) or 1, 1)
-    categories_pagination = ActivityCategory.query.order_by(ActivityCategory.name).paginate(
-        page=category_page, per_page=5, error_out=False)
+    categories_pagination = ActivityCategory.query.order_by(ActivityCategory.name, ActivityCategory.id).paginate(
+        page=category_page, per_page=25, error_out=False)
     if category_page > max(categories_pagination.pages, 1):
         return redirect(url_for('admin.admin_dash', tab=active_tab, campus_id=campus_id,
                                 search=search, role=role, college_affiliation=affiliation,
@@ -570,7 +570,7 @@ def export_users_csv():
               'volunteer_type', 'college_affiliation', 'is_active', 'created_at')
     writer = csv.DictWriter(output, fieldnames=fields)
     writer.writeheader()
-    for user in User.query.order_by(User.name).all():
+    for user in User.query.options(joinedload(User.campus)).order_by(User.name, User.id).yield_per(1000):
         writer.writerow({key: csv_safe(value) for key, value in {
             'name': user.name,
             'email': user.email,

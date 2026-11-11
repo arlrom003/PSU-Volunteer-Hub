@@ -241,7 +241,7 @@
   class="btn btn--outline"
   href="{{ url_for('director.analytics', **dict(live_navigation_query, page=report_page - 1)) }}#decision-records"
 >Previous</a>{% endif %}
-        {% for page_number in range(1, report_total_pages + 1) %}<a
+        {% for page_number in range(1, report_total_pages + 1) if page_number == 1 or page_number == report_total_pages or (page_number >= report_page - 2 and page_number <= report_page + 2) %}<a
   class="btn {{ 'btn--primary' if page_number == report_page else 'btn--outline' }}"
   href="{{ url_for('director.analytics', **dict(live_navigation_query, page=page_number)) }}#decision-records"
   {{ 'aria-current=page' if page_number == report_page }}

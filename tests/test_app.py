@@ -1753,6 +1753,29 @@ class TestRecommendationEngine:
             scores = {r['event'].title: r['score'] for r in recs}
             assert scores['Health Cand'] > scores['Sport Cand']
 
+    def test_reused_similarity_preserves_category_boost_and_new_preferences(self, app):
+        with app.app_context():
+            profile = self._make_user_with_terms(
+                'reuse-score@test.com', ['Teaching', 'Python'], ['Environment'])
+            history = Event(title='Earlier outreach', description='History', campus_id=1,
+                            date=datetime.now() - timedelta(days=3), category='Environment')
+            candidates = [Event(title=f'Outreach {index}', description='Recommendation case', campus_id=1,
+                date=datetime.now() + timedelta(days=3), category=category, required_skills=skill)
+                for index, (category, skill) in enumerate([
+                    ('Environment', 'Teaching'), ('Teaching', 'Environment'), ('Environment', 'Teaching')])]
+            db.session.add(history)
+            db.session.flush()
+            db.session.add(Registration(user_id=profile.user_id, event_id=history.id, status='completed'))
+            db.session.commit()
+            base = _cosine_similarity(set(profile.skill_list + profile.interest_list), {'Teaching', 'Environment'})
+            first = {row['event'].title: row['score'] for row in get_recommendations(profile, candidates, top_n=3)}
+            assert first == {'Outreach 0': round(base + .15, 4), 'Outreach 1': round(base, 4),
+                             'Outreach 2': round(base + .15, 4)}
+            profile.user.interests.clear()
+            db.session.commit()
+            second = {row['event'].title: row['score'] for row in get_recommendations(profile, candidates, top_n=3)}
+            assert second == {'Outreach 0': .65, 'Outreach 1': .5, 'Outreach 2': .65}
+
     def test_recommendations_deterministic(self, app):
         with app.app_context():
             profile = self._make_user_with_terms(
@@ -2520,6 +2543,7 @@ class TestReportingSystem:
         labels = re.findall(r'<span>([^<]+)</span>', dashboard_body.split('campus-filter__grid', 1)[1].split('</fieldset>', 1)[0])
         assert labels == sorted(labels, key=str.lower)
         def pdf(rows, summary, meta):
+            rows = list(rows)
             assert summary['event_count'] == expected
             assert len(rows) == expected
             assert 'Lingayen' in meta['scope']
@@ -2736,6 +2760,7 @@ class TestReportingSystem:
         assert 'Activity name contains: cLeAnUp' in csv.get_data(as_text=True)
 
         def fake_pdf(rows, report_summary, meta):
+            rows = list(rows)
             assert report_summary == summary
             assert len(rows) == summary['event_count']
             assert meta['activity_name'] == 'cLeAnUp'

@@ -9,6 +9,8 @@ load_dotenv(os.path.join(basedir, '.env'))
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-fallback-key')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    PERFORMANCE_METRICS_ENABLED = os.environ.get('PERFORMANCE_METRICS_ENABLED', 'false').lower() == 'true'
+    PERFORMANCE_SLOW_QUERY_MS = int(os.environ.get('PERFORMANCE_SLOW_QUERY_MS', '100'))
 
     UPLOAD_FOLDER = os.path.join(basedir, 'static', 'uploads')
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 MB
@@ -109,6 +111,9 @@ class ProductionConfig(Config):
     # collection whenever DATABASE_URL is unset. Enforcement happens in
     # create_app() when the production config is actually selected.
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
+    SQLALCHEMY_ENGINE_OPTIONS = dict(pool_pre_ping=True, pool_recycle=300,
+                                     pool_size=5, max_overflow=0, pool_timeout=5,
+                                     connect_args={'connect_timeout': 5})
     SECRET_KEY = os.environ.get('SECRET_KEY')
     SESSION_COOKIE_SECURE = True
     PREFERRED_URL_SCHEME = 'https'

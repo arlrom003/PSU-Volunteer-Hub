@@ -10,6 +10,7 @@
 {% macro annual_plan_summary(plan, title='Annual-Plan Achievement') -%}
   {% set action_style = 'btn--primary' if request.endpoint == 'coordinator.coordinator_dash' else 'btn--outline' %}
   {% set display = plan.campus_rollup if plan.campus_rollup is defined else plan %}
+  {% set move_workspace_actions = plan.campus_rollup is defined and current_user.role == 'director' %}
   <section class="goal-overview" aria-label="{{ title }}" data-tour-id="annual-goals">
     <div class="goal-overview__scope"><h2>{{ title }}</h2><span>{{ plan.year }} · {{ display.scope }} Targets · Through {{ plan.cutoff }}</span></div>
     {% if request.endpoint in ['director.director_dash', 'coordinator.coordinator_dash'] %}<form class="goal-year" method="get">{% for key, value in request.args.items(multi=true) if key != 'goal_year' %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}<label for="goal-year">Target Year</label><input id="goal-year" class="input" type="number" name="goal_year" min="1900" max="2100" value="{{ plan.year }}" required><button class="btn {{ action_style }}">Apply Year</button></form>{% endif %}
@@ -19,10 +20,10 @@
         <span class="goal-hero__value{{ ' goal-hero__value--empty' if display.rate is none }}">{{ (display.rate|string ~ '%') if display.rate is not none else 'Not Available' }}</span>
         <strong>{{ 'Campus Goals Achieved' if plan.campus_rollup is defined else 'Goals Achieved' }}</strong><span>{{ display.met }} of {{ display.total }} {{ 'Sample' if plan.sample else 'Approved' }} Goals</span>
         {% if plan.campus_rollup is defined %}<span>{{ display.pending }} Awaiting Evidence</span>{% endif %}
-        <span class="goal-hero__cue">{{ 'View Campus Goal Results' if plan.campus_rollup is defined else 'View Goal Details' }}</span>
+        <span class="goal-hero__cue{{ ' btn btn--outline' if plan.campus_rollup is defined }}">{{ 'View Campus Goal Results' if plan.campus_rollup is defined else 'View Goal Details' }}</span>
       </a>
       <div class="goal-plan-pair">{% for kind, link in [('AOP', display.aop_url), ('ASP', display.asp_url)] %}
-        <a class="goal-plan" href="{{ link }}"><span>{{ kind }}</span><strong>{{ display.plans[kind].met }} <small>/ {{ display.plans[kind].total }}</small></strong><span>Goals Achieved</span></a>
+        <a class="goal-plan" href="{{ link }}"><span>{{ kind }}</span><small class="goal-plan__meaning">({{ 'Annual Operational Plan' if kind == 'AOP' else 'Annual Strategic Plan' }})</small><strong>{{ display.plans[kind].met }} <small>/ {{ display.plans[kind].total }}</small></strong><span>Goals Achieved</span></a>
       {% endfor %}</div>
       {% if plan.campus_ranking is defined %}
       {% set ranking = plan.campus_ranking %}
@@ -39,7 +40,7 @@
             <span>{{ leader.rate }}%{% if ranking.leaders|length == 1 %} · {{ leader.met }} of {{ leader.total }} Goals Achieved{% endif %}</span>
           {% endif %}
           <span class="goal-participation__basis">{{ 'Lowest Annual Goal-Achievement Rate' if request.endpoint == 'director.director_dash' and current_user.role == 'director' else 'Annual Goals Achieved' }}{% if plan.sample %} · Sample Data{% endif %}</span>
-          <span class="goal-hero__cue">View Campus Ranking</span>
+          <span class="goal-hero__cue btn btn--outline">View Campus Ranking</span>
         </summary>
         <div class="goal-participation__breakdown">
           {% if request.endpoint == 'director.director_dash' and current_user.role == 'director' %}<p>Lowest annual goal-achievement rate among campuses with approved targets. Zero achievement and tied campuses are included.</p>{% endif %}
@@ -66,15 +67,25 @@
     <section class="goal-university" aria-label="University-wide targets">
       <div><h3>University-wide targets</h3><p>Separate from campus goals.</p></div>
       <div><strong>{{ plan.status }}</strong><p>{{ plan.met }} of {{ plan.total }} goals achieved; {{ plan.pending }} awaiting evidence.</p><p>AOP {{ plan.plans.AOP.met }}/{{ plan.plans.AOP.total }} · ASP {{ plan.plans.ASP.met }}/{{ plan.plans.ASP.total }}</p></div>
-      <a class="btn btn--outline" href="{{ plan.detail_url }}">View University Targets</a>
+      <nav class="goal-overview__actions goal-university__actions" aria-label="University Goal Actions">
+        <a class="btn btn--outline" href="{{ plan.detail_url }}">View University Targets</a>
+        {% if move_workspace_actions %}
+          {% if not plan.sample %}<a class="btn {{ action_style }}" href="{{ plan.workspace_url }}">Review Goal Proposals{% if plan.proposal_count %} ({{ plan.proposal_count }}){% endif %}</a>{% endif %}
+          <a class="btn btn--outline" href="{{ plan.detail_url }}#campus-results">Compare Campus Goals</a>
+        {% endif %}
+      </nav>
     </section>
     {% endif %}
     {% if plan.guidance and current_user.role == 'coordinator' %}{{ guidance(plan.guidance) }}{% endif %}
+    {% if not move_workspace_actions or (not plan.sample and request.endpoint not in ['director.director_dash', 'coordinator.coordinator_dash']) %}
     <nav class="goal-overview__actions" aria-label="Annual Goal Workspaces">
+      {% if not move_workspace_actions %}
       {% if not plan.sample and current_user.role != 'admin' %}<a class="btn {{ action_style }}" href="{{ plan.workspace_url }}">{{ 'Review Goal Proposals' if current_user.role == 'director' else 'Campus Goal Proposals' }}{% if plan.proposal_count %} ({{ plan.proposal_count }}){% endif %}</a>{% endif %}
       {% if current_user.role == 'director' %}<a class="btn btn--outline" href="{{ plan.detail_url }}#campus-results">Compare Campus Goals</a>{% endif %}
+      {% endif %}
       {% if not plan.sample and request.endpoint not in ['director.director_dash', 'coordinator.coordinator_dash'] %}<a class="btn {{ action_style }}" href="{{ url_for(request.endpoint, goal_year=plan.year, sample=1) }}">Preview Sample Data</a>{% endif %}
     </nav>
+    {% endif %}
   </section>
 {%- endmacro %}
 

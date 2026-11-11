@@ -17,15 +17,16 @@ from app.utils.decorators import roles_required
 from app.recommendation.analytics import AnalyticsAggregator
 from app.models import db
 from app.models.event import Event, Campus, SdgGoal
-from app.campuses import campus_query
+from app.campuses import campus_query, campus_rows
 from app.models.user import User
 from app.models.notification import Notification
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.datastructures import MultiDict
 from app.dashboard import (summarize_report, resolve_period, dashboard_evidence, annual_plan_summary,
                            operational_guidance, present_guidance, scheduling_scope, GUIDANCE_SCOPE_KEYS, guidance_scope_label)
 from app.annual_goals import selected_year, goal_guidance, summary as annual_goal_summary
+from app.pagination import report_page
 from app.reports import (
     build_events_report, render_csv, render_pdf, resolve_campus,
     ReportError, _build_meta, parse_date_range)
@@ -70,7 +71,7 @@ def _historical_filters():
 
 
 def _live_report_context(period):
-    campuses = campus_query().order_by(db.func.lower(Campus.name), Campus.name, Campus.id).all()
+    campuses = campus_rows()
     selected, mode, allowed, error = _live_campuses(campuses)
     sex = request.args.get('sex', '').strip().lower()
     sex = sex if sex in ('male', 'female', 'prefer_not_to_say', 'unrecorded') else None
@@ -78,11 +79,12 @@ def _live_report_context(period):
     sdg_id = request.args.get('sdg_id', type=int)
     sdg = next((goal for goal in sdgs if goal.id == sdg_id), None)
     sdg_id = sdg.id if sdg else None
-    try:
-        evidence = dashboard_evidence(dict(campus_ids=allowed,
+    scope_filter = dict(campus_ids=allowed,
             category=request.args.get('category', '').strip(), sex=sex, sdg_id=sdg_id,
             activity_name=request.args.get('activity_name', ''),
-            attention=request.args.get('attention', ''), event_id=request.args.get('event_id')), period)
+            attention=request.args.get('attention', ''), event_id=request.args.get('event_id'))
+    try:
+        evidence = dashboard_evidence(scope_filter, period)
     except ReportError:
         abort(400, description='Choose valid report dates and attention filters. Clear the sex filter to review participant targets.')
     query = {key: values for key, values in request.args.to_dict(flat=False).items()
@@ -136,7 +138,8 @@ def _live_report_context(period):
     if request.args.get('department', '').strip():
         chips.append({'label': 'Affiliation: ' + request.args['department'].strip(),
                       'query': _without('department')})
-    return dict(evidence, active_filter_chips=chips,
+    return dict(evidence, report_scope=dict(scope_filter, start_date=period['start'], end_date=period['end']),
+        active_filter_chips=chips,
         campuses=campuses, selected_campuses=selected, campus_mode=mode,
         campus_error=error, live_query=query, live_navigation_query=dict(query, view=['live']),
         live_scope=scope, live_summary=evidence['evidence_summary'],
@@ -153,8 +156,10 @@ def _director_calendar(year, month, campus_id=None, category='', dashboard=False
     year, month = year or now.year, month or now.month
     if not 1 <= year <= 9999 or not 1 <= month <= 12:
         year, month = now.year, now.month
-    query = Event.query.options(selectinload(Event.campus), selectinload(Event.sdgs)).filter(
-        db.extract('year', Event.date) == year, db.extract('month', Event.date) == month)
+    end = datetime.max if (year, month) == (9999, 12) else (
+        datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1))
+    query = Event.query.options(joinedload(Event.campus), selectinload(Event.sdgs)).filter(
+        Event.date >= datetime(year, month, 1), Event.date <= end if end == datetime.max else Event.date < end)
     if campus_id:
         query = query.filter(Event.campus_id == campus_id)
     if category:
@@ -366,13 +371,18 @@ def analytics():
         flash('Use valid report dates, with the start date on or before the end date.', 'error')
         return redirect(url_for('director.analytics'))
     filters = _historical_filters()
+    historical_query = dict(view='historical', **{key: value for key, value in filters.items() if value is not None})
+    if analytics_view == 'historical':
+        from app.models.event import HistoricalActivity
+        return render_template('director/Director_impact_anlaytics_dash.html',
+            analytics_view=analytics_view, historical_query=historical_query,
+            live_navigation_query={}, selected_filters=filters,
+            campuses=campus_query().order_by(Campus.name).all(),
+            historical_summary=AnalyticsAggregator.historical_summary(**filters),
+            historical_campus_data=AnalyticsAggregator.historical_campus_stats(**filters),
+            activity_types=[row[0] for row in db.session.query(HistoricalActivity.activity_type).filter(
+                HistoricalActivity.activity_type.isnot(None)).distinct().all()])
     demographics = AnalyticsAggregator.role_demographics()
-    historical_summary = AnalyticsAggregator.historical_summary(**filters)
-    historical_campus_data = AnalyticsAggregator.historical_campus_stats(**filters)
-    from app.models.event import HistoricalActivity
-    activity_types = [row[0] for row in db.session.query(
-        HistoricalActivity.activity_type).filter(
-            HistoricalActivity.activity_type.isnot(None)).distinct().all()]
 
     context = _live_report_context(period)
     live_rows, live_summary = context['evidence_rows'], context['live_summary']
@@ -380,11 +390,7 @@ def analytics():
     live_end = period['end']
     live_category = request.args.get('category', '').strip()
     live_sex = context['selected_sex']
-    report_page = max(request.args.get('page', 1, type=int), 1)
-    report_page_size = 10
-    report_total_pages = max(1, (len(live_rows) + report_page_size - 1) // report_page_size)
-    report_page = min(report_page, report_total_pages)
-    report_rows = live_rows[(report_page - 1) * report_page_size:report_page * report_page_size]
+    pagination = report_page(context['report_scope'], live_summary['event_count'], per_page=10)
     department = context['selected_department']
 
     # Supplementary profile evidence retains its independently labelled scope.
@@ -403,20 +409,14 @@ def analytics():
         if value is not None:
             historical_query[key] = value
 
-    selected_year = request.args.get('year', datetime.now().year, type=int)
-    annual_plan = annual_plan_summary(selected_year)
     return render_template('director/Director_impact_anlaytics_dash.html',
                             **context,
-                            annual_plan=annual_plan,
                             analytics_view=analytics_view,
                             demographics=demographics,
-                            historical_summary=historical_summary,
-                            historical_campus_data=historical_campus_data,
-                            activity_types=activity_types,
                             historical_query=historical_query,
                             selected_filters=filters,
-                            live_rows=report_rows,
-                            report_page=report_page, report_total_pages=report_total_pages,
+                            live_rows=pagination.items,
+                            report_page=pagination.page, report_total_pages=pagination.pages,
                             top_skills=top_skills,
                             top_interests=top_interests,
                             department_participants=department_participants,
@@ -537,7 +537,8 @@ def _university_report_payload():
     sex = request.args.get('sex', '').strip().lower()
     sdg_id = request.args.get('sdg_id', type=int)
     sdg = db.session.get(SdgGoal, sdg_id) if sdg_id else None
-    rows, summary = build_events_report(
+    from app.reports import batched_events_report
+    rows, summary = batched_events_report(
         campus_ids=allowed, start_date=start, end_date=end,
         category=category, sex=sex if sex in (
             'male', 'female', 'prefer_not_to_say', 'unrecorded') else None,

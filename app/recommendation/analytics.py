@@ -198,14 +198,18 @@ class AnalyticsAggregator:
     @staticmethod
     def _event_attendance_counts(events):
         event_ids = [event.id for event in events]
-        registrations = dict(db.session.query(
-            Registration.event_id, db.func.count(Registration.id)).filter(
-            Registration.event_id.in_(event_ids)).group_by(Registration.event_id).all())
-        attendance = dict(db.session.query(
-            Attendance.event_id, db.func.count(Attendance.id)).filter(
+        registrations = db.session.query(Registration.event_id.label('event_id'),
+            db.func.count(Registration.id).label('total')).filter(Registration.event_id.in_(event_ids)
+        ).group_by(Registration.event_id).subquery()
+        attendance = db.session.query(Attendance.event_id.label('event_id'),
+            db.func.count(Attendance.id).label('total')).filter(
             Attendance.event_id.in_(event_ids), Attendance.status == 'present'
-        ).group_by(Attendance.event_id).all())
-        return registrations, attendance
+        ).group_by(Attendance.event_id).subquery()
+        counts = db.session.query(Event.id, db.func.coalesce(registrations.c.total, 0),
+            db.func.coalesce(attendance.c.total, 0)).outerjoin(
+            registrations, registrations.c.event_id == Event.id).outerjoin(
+            attendance, attendance.c.event_id == Event.id).filter(Event.id.in_(event_ids)).all()
+        return {row[0]: row[1] for row in counts}, {row[0]: row[2] for row in counts}
 
     @staticmethod
     def attendance_summary(campus_id=None, limit=10):
@@ -552,22 +556,26 @@ class AnalyticsAggregator:
         """Return the annual, verified-participation Top 5 recognition lists."""
         start = datetime(year, 1, 1)
         end = datetime(year + 1, 1, 1)
+        completed_counts = db.session.query(
+            Registration.user_id.label('user_id'), db.func.count(Registration.id).label('completed')
+        ).join(Event).filter(Registration.status == 'completed', Event.date >= start, Event.date < end
+        ).group_by(Registration.user_id).subquery()
+        attended = db.func.count(Attendance.id)
+        completed = db.func.coalesce(completed_counts.c.completed, 0)
+        name_order = User.name.collate('utf8mb4_bin' if db.engine.dialect.name in ('mysql', 'mariadb') else 'BINARY')
         volunteers = db.session.query(
             User.id, User.name, Campus.name,
-            db.func.count(Attendance.id).label('attendance')
+            attended.label('attendance'), completed
         ).join(Attendance, Attendance.user_id == User.id).join(
             Event, Event.id == Attendance.event_id).outerjoin(
-            Campus, Campus.id == User.campus_id).filter(
+            Campus, Campus.id == User.campus_id).outerjoin(
+            completed_counts, completed_counts.c.user_id == User.id).filter(
                 User.role == 'volunteer', Attendance.status == 'present',
                 Event.date >= start, Event.date < end).group_by(
-                    User.id, User.name, Campus.name).all()
-        completed_counts = dict(db.session.query(
-            Registration.user_id, db.func.count(Registration.id)).join(Event).filter(
-            Registration.status == 'completed', Event.date >= start, Event.date < end
-        ).group_by(Registration.user_id).all())
+                    User.id, User.name, Campus.name, completed_counts.c.completed).order_by(
+                        attended.desc(), completed.desc(), name_order, User.id).limit(5).all()
         volunteer_rows = []
-        for user_id, name, campus, attendance in volunteers:
-            completed = completed_counts.get(user_id, 0)
+        for user_id, name, campus, attendance, completed in volunteers:
             volunteer_rows.append({'name': name, 'campus': campus or 'Unassigned',
                                    'attendance': int(attendance), 'completed': completed})
         volunteer_rows.sort(key=lambda row: (-row['attendance'], -row['completed'], row['name']))
@@ -583,7 +591,8 @@ class AnalyticsAggregator:
             Attendance.user_id.isnot(None), Attendance.status == 'present',
             Event.date >= start, Event.date < end).group_by(Event.campus_id).all())
         campus_rows = []
-        for campus in Campus.query.order_by(Campus.name).all():
+        from app.campuses import campus_rows as official_campuses
+        for campus in official_campuses():
             registrations = campus_registrations.get(campus.id, 0)
             if not registrations:
                 continue

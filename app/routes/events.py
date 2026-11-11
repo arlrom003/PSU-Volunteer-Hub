@@ -8,18 +8,18 @@ from flask import (Blueprint, render_template, request, redirect, url_for,
 from flask_login import login_required, current_user
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy import func
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload, selectinload, load_only, with_expression
 from sqlalchemy.exc import IntegrityError
 from app.models import db
 from app.campuses import campus_query
-from app.models.user import VolunteerProfile
 from app.models.event import (Event, Registration, Attendance, Campus,
-                             ExternalParticipant, CancellationRequest)
+                             ExternalParticipant, CancellationRequest, capacity_query)
 from app.models.policy import ParticipationAgreementRevision
 from app.recommendation.engine import get_recommendations, bootstrap_from_event
 from app.utils.decorators import role_required
 from app.models.notification import notify, notify_campus_coordinators
 from app.utils.audit import log_activity
+from app.pagination import paginate
 from datetime import datetime
 from calendar import Calendar
 
@@ -43,7 +43,7 @@ def _listing_query():
 def _registration_query():
     return {key: request.args.getlist(key)
             for key in ('status', 'campus', 'category', 'start_date', 'end_date',
-                        'show', 'calendar_year', 'calendar_month')
+                        'show', 'page', 'calendar_year', 'calendar_month')
             if key in request.args}
 
 
@@ -75,9 +75,11 @@ def _cancellation_state(registration, now=None):
             'message': message, 'deadline': deadline}
 
 
-def _opportunity_state(event, registration=None, now=None):
+def _opportunity_state(event, registration=None, now=None, registration_status=None):
     remaining = event.slots_remaining()
-    if registration is not None and registration.status != 'cancelled':
+    if registration is not None:
+        registration_status = registration.status or 'pending'
+    if registration_status is not None and registration_status != 'cancelled':
         code, label = 'registered', 'Registered'
     elif event.date <= (now or datetime.now()):
         code, label = 'closed', 'Registration closed'
@@ -184,9 +186,8 @@ def opportunities():
     category = (request.args.get('category', type=str) or '').strip() or None
     search = (request.args.get('search', type=str) or '').strip() or None
     now = datetime.now()
-    query = Event.query.options(joinedload(Event.campus), selectinload(Event.registrations)
-                               ).filter(Event.date >= now, Event.slots > 0)
-    upcoming_count = query.count()
+    query = Event.query.filter(Event.date >= now, Event.slots > 0)
+    upcoming_query = query
     if filter_error:
         query = query.filter(db.false())
     elif selected_campuses:
@@ -201,21 +202,23 @@ def opportunities():
         like = f'%{search}%'
         query = query.filter(Event.title.ilike(
             like) | Event.description.ilike(like))
-    query = query.order_by(Event.date.asc(), Event.id.asc())
-    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    upcoming_count, filtered_count = db.session.query(
+        upcoming_query.with_entities(func.count(Event.id)).scalar_subquery(),
+        query.with_entities(func.count(Event.id)).scalar_subquery()).one()
+    query = capacity_query(query).options(joinedload(Event.campus)).order_by(Event.date.asc(), Event.id.asc())
+    if current_user.is_authenticated and current_user.role == 'volunteer':
+        status = db.select(func.coalesce(Registration.status, 'pending')).where(
+            Registration.user_id == current_user.id, Registration.event_id == Event.id).correlate(Event).scalar_subquery()
+        query = query.options(with_expression(Event.viewer_registration_status, status))
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False, count=False)
+    pagination.total = filtered_count
     events = pagination.items
     # Data-driven category filter: distinct categories actually in use,
     # so the dropdown never offers options that return zero results.
     categories = [row[0] for row in db.session.query(
         Event.category).distinct().order_by(Event.category).all() if row[0]]
-    registrations_by_event = {}
-    if current_user.is_authenticated and current_user.role == 'volunteer':
-        registrations_by_event = {
-            registration.event_id: registration
-            for registration in Registration.query.filter_by(
-                user_id=current_user.id).all()
-            if registration.status != 'cancelled'
-        }
+    registered_event_ids = {event.id for event in events
+                            if event.viewer_registration_status not in (None, 'cancelled')}
     return render_template('volunteer/Volunteer_opportunities.html',
                            events=events, campuses=campuses,
                            categories=categories,
@@ -228,9 +231,9 @@ def opportunities():
                            selected_category=category,
                            selected_status='upcoming',
                            search_query=search,
-                           registered_event_ids=set(registrations_by_event),
+                           registered_event_ids=registered_event_ids,
                            opportunity_states={event.id: _opportunity_state(
-                               event, registrations_by_event.get(event.id), now)
+                               event, now=now, registration_status=event.viewer_registration_status)
                                for event in events},
                            listing_query=_listing_query(), upcoming_count=upcoming_count,
                            has_filters=bool(search or category or raw_campuses or filter_error),
@@ -240,7 +243,7 @@ def opportunities():
 
 @events_bp.route('/opportunities/<int:event_id>')
 def opportunity_detail(event_id):
-    event = db.session.get(Event, event_id)
+    event = capacity_query(Event.query).options(joinedload(Event.campus)).filter_by(id=event_id).first()
     if event is None:
         abort(404)
     registration = None
@@ -257,7 +260,8 @@ def opportunity_detail(event_id):
 @login_required
 @role_required('volunteer')
 def register_for_event(event_id):
-    event = db.session.get(Event, event_id)
+    event = (Event.query.filter_by(id=event_id).with_for_update().first() if request.method == 'POST'
+             else capacity_query(Event.query).options(joinedload(Event.campus)).filter_by(id=event_id).first())
     if event is None:
         abort(404)
     listing_query = _listing_query()
@@ -269,12 +273,15 @@ def register_for_event(event_id):
     if agreement is None:
         flash('This activity cannot accept registrations until its participation agreement is published.', 'error')
         return redirect(details_url)
-    existing = Registration.query.filter_by(
-        user_id=current_user.id, event_id=event_id).first()
+    existing_query = Registration.query.filter_by(user_id=current_user.id, event_id=event_id)
+    existing = (existing_query.with_for_update() if request.method == 'POST' else existing_query).first()
     if existing and existing.status != 'cancelled':
         flash('You are already registered for this event.', 'warning')
         return redirect(details_url)
-    if event.slots > 0 and event.slots_remaining() <= 0:
+    active = db.session.query(func.count(Registration.id)).filter(
+        Registration.event_id == event.id, Registration.status.in_(('confirmed', 'completed')))
+    remaining = event.slots - active.with_for_update().scalar() if request.method == 'POST' else event.slots_remaining()
+    if event.slots > 0 and remaining <= 0:
         flash('No available slots for this event.', 'error')
         return redirect(details_url)
     errors = {}
@@ -311,15 +318,14 @@ def register_for_event(event_id):
                  {'event_id': event.id, 'version': agreement['version']})
     if event.nda_required:
         log_activity('nda_accepted', registration, {'event_id': event.id, 'version': event.nda_version})
-    db.session.commit()
-    bootstrap_from_event(current_user, event)
+    bootstrap_from_event(current_user, event, commit=False)
     notify_campus_coordinators(
         event.campus_id,
         title=f'New registration: {event.title}',
         message=f'{current_user.name or current_user.email} registered for '
                 f'"{event.title}".',
         notification_type='registration',
-        related_event_id=event.id)
+        related_event_id=event.id, commit=False)
     db.session.commit()
     flash(success_message, 'success')
     return redirect(details_url)
@@ -367,7 +373,7 @@ def cancel_registration(registration_id):
             title=f'Cancellation request: {event.title}',
             message=f'{current_user.name or current_user.email} requested cancellation for "{event.title}".',
             notification_type='cancellation_requested',
-            related_event_id=event.id)
+            related_event_id=event.id, commit=False)
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
@@ -383,12 +389,12 @@ def cancel_registration(registration_id):
 @login_required
 @role_required('volunteer')
 def volunteer_dash():
-    profile = VolunteerProfile.query.filter_by(user_id=current_user.id).first()
-    upcoming_events = Event.query.filter(
-        Event.date >= datetime.now()).options(selectinload(Event.required_skills_rel)
-        ).order_by(Event.date.asc()).all()
+    profile = current_user.profile
+    candidates = Event.query.filter(Event.date >= datetime.now()).options(
+        load_only(Event.id, Event.date, Event.category), selectinload(Event.required_skills_rel)
+    ).order_by(Event.date, Event.id).all()
     recommendations = get_recommendations(
-        profile, upcoming_events, campus_id=current_user.campus_id)
+        profile, candidates, campus_id=current_user.campus_id, commit=False)
     total_activities = Registration.query.filter_by(
         user_id=current_user.id).count()
     cert_level = 'Active' if total_activities else 'New'
@@ -396,19 +402,13 @@ def volunteer_dash():
     now = datetime.now()
     upcoming = Registration.query.filter_by(user_id=current_user.id).join(Event).filter(
         Event.date >= now, Registration.status.in_(('pending', 'confirmed'))
-    ).order_by(Event.date.asc()).limit(5).all()
+    ).options(joinedload(Registration.event)).order_by(Event.date.asc(), Registration.id).limit(5).all()
     recent_activity = Registration.query.filter_by(user_id=current_user.id).order_by(
-        Registration.registered_at.desc()).limit(5).all()
+        Registration.registered_at.desc(), Registration.id.desc()).options(joinedload(Registration.event)).limit(5).all()
     registrations = Registration.query.filter_by(user_id=current_user.id).join(Event).options(
         joinedload(Registration.event).joinedload(Event.campus),
         joinedload(Registration.cancellation_request).joinedload(CancellationRequest.reviewed_by),
-        joinedload(Registration.attendance_record)).all()
-    upcoming_registrations = [r for r in registrations if (
-        r.status in ('pending', 'confirmed') and r.event.date > now)]
-    history_registrations = [r for r in registrations if r not in upcoming_registrations]
-    upcoming_registrations.sort(key=lambda r: r.event.date)
-    history_registrations.sort(
-        key=lambda r: r.registered_at or datetime.min, reverse=True)
+        joinedload(Registration.attendance_record))
     status_filter = request.args.get('status', '').strip()
     campus_filter = request.args.get('campus', type=int)
     category_filter = request.args.get('category', '').strip()
@@ -416,35 +416,38 @@ def volunteer_dash():
     end_filter = request.args.get('end_date', '').strip()
     filtered_registrations = registrations
     if status_filter:
-        filtered_registrations = [r for r in filtered_registrations if r.status == status_filter]
+        filtered_registrations = filtered_registrations.filter(Registration.status == status_filter)
     if campus_filter:
-        filtered_registrations = [r for r in filtered_registrations if r.event.campus_id == campus_filter]
+        filtered_registrations = filtered_registrations.filter(Event.campus_id == campus_filter)
     if category_filter:
-        filtered_registrations = [r for r in filtered_registrations if r.event.category == category_filter]
+        filtered_registrations = filtered_registrations.filter(Event.category == category_filter)
     try:
         if start_filter:
             start = datetime.fromisoformat(start_filter)
-            filtered_registrations = [r for r in filtered_registrations if r.event.date >= start]
+            filtered_registrations = filtered_registrations.filter(Event.date >= start)
         if end_filter:
             end = datetime.fromisoformat(end_filter).replace(hour=23, minute=59, second=59)
-            filtered_registrations = [r for r in filtered_registrations if r.event.date <= end]
+            filtered_registrations = filtered_registrations.filter(Event.date <= end)
     except ValueError:
         flash('Use valid dates for registration history filters.', 'error')
-    filtered_registrations.sort(key=lambda r: r.registered_at or datetime.min, reverse=True)
-    shown = max(5, request.args.get('show', 5, type=int) or 5)
-    shown = min(shown, len(filtered_registrations))
+    per_page = min(100, max(25, request.args.get('show', 25, type=int) or 25))
+    pagination = paginate(filtered_registrations.order_by(Registration.registered_at.desc(), Registration.id.desc()), per_page)
+    shown = len(pagination.items)
     registration_items = [
         {
             'registration': r,
             'cancellation_state': _cancellation_state(r, now),
             'cancellation_status': r.cancellation_request.status if r.cancellation_request else None,
         }
-        for r in filtered_registrations[:shown]]
+        for r in pagination.items]
     year = request.args.get('calendar_year', now.year, type=int) or now.year
     month = request.args.get('calendar_month', now.month, type=int) or now.month
-    if month < 1 or month > 12:
+    if month < 1 or month > 12 or not 1 <= year <= 9998:
         year, month = now.year, now.month
-    active_calendar = [r for r in upcoming_registrations if r.status == 'confirmed']
+    month_start = datetime(year, month, 1)
+    month_end = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
+    active_calendar = registrations.filter(Registration.status == 'confirmed', Event.date > now,
+                                           Event.date >= month_start, Event.date < month_end).all()
     events_by_day = {}
     for registration in active_calendar:
         if registration.event.date.year == year and registration.event.date.month == month:
@@ -453,17 +456,18 @@ def volunteer_dash():
     previous_year, previous_month = (year - 1, 12) if month == 1 else (year, month - 1)
     next_year, next_month = (year + 1, 1) if month == 12 else (year, month + 1)
     campuses = campus_query().order_by(Campus.name).all()
-    categories = sorted({r.event.category for r in registrations if r.event.category})
+    categories = [row[0] for row in db.session.query(Event.category).join(Registration).filter(
+        Registration.user_id == current_user.id, Event.category.isnot(None)).distinct().order_by(Event.category).all()]
     upcoming_schedule = [{'event': r.event, 'date': r.event.date}
                          for r in upcoming]
     certification = {'level': cert_level}
-    return render_template('volunteer/Volunteer_dash.html',
+    response = render_template('volunteer/Volunteer_dash.html',
                            recommendations=recommendations,
                            user_stats=user_stats,
                            recent_activity=recent_activity,
                            registration_items=registration_items,
-                           registration_total=len(filtered_registrations), shown_registrations=shown,
-                           has_registrations=bool(registrations), dashboard_query=_registration_query(),
+                           registration_total=pagination.total, shown_registrations=shown, pagination=pagination,
+                           has_registrations=bool(total_activities), dashboard_query=_registration_query(),
                            registration_filters={'status': status_filter, 'campus': campus_filter,
                                                  'category': category_filter, 'start_date': start_filter,
                                                  'end_date': end_filter},
@@ -475,6 +479,8 @@ def volunteer_dash():
                            next_calendar=(next_year, next_month),
                            upcoming_schedule=upcoming_schedule,
                            certification=certification)
+    db.session.commit()
+    return response
 
 
 def _dismiss_first_use_guide():

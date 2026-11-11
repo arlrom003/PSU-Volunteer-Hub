@@ -6,22 +6,28 @@ profile-level analytics (impact stats, badges, level progress,
 preferred categories, and event recommendations).
 """
 from collections import Counter
+from datetime import datetime, timedelta
 import os
 import uuid
 from pathlib import Path
 
 from flask import (Blueprint, render_template, request, redirect, url_for,
-                   flash, current_app)
+                   flash, current_app, session)
 from flask_login import login_required, current_user
 from PIL import Image, UnidentifiedImageError
 from werkzeug.utils import secure_filename
 from app.models import db
-from app.models.user import VolunteerProfile, Skill, Interest
+from app.models.user import (VolunteerProfile, Skill, Interest, User,
+                             AuthSecurityEvent, PasswordResetToken)
 from app.models.event import Registration, Event, Attendance
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 from app.recommendation.engine import get_recommendations
 from app.utils.decorators import role_required
+from app.utils.audit import log_activity
+from app.campuses import campus_rows, campus_affiliations, official_campus
+from app.security import password_error, password_min_length
+from app.services.session_idle import end_session
 
 volunteer_bp = Blueprint('volunteer', __name__, url_prefix='')
 
@@ -127,7 +133,6 @@ def _preferred_categories(user_id, top_n=3):
 @login_required
 @role_required('volunteer')
 def profile_page():
-    profile = VolunteerProfile.query.filter_by(user_id=current_user.id).first()
     errors = {}
     selected_skills = [str(skill.id) for skill in current_user.skills]
     selected_interests = [str(interest.id) for interest in current_user.interests]
@@ -157,6 +162,7 @@ def profile_page():
         if not errors:
             old_path = current_user.profile_image_path
             try:
+                profile = VolunteerProfile.query.filter_by(user_id=current_user.id).first()
                 if not profile:
                     profile = VolunteerProfile(user_id=current_user.id)
                     db.session.add(profile)
@@ -169,7 +175,6 @@ def profile_page():
             except SQLAlchemyError:
                 db.session.rollback()
                 _delete_profile_image(image_path)
-                profile = VolunteerProfile.query.filter_by(user_id=current_user.id).first()
                 current_app.logger.exception('Profile save failed')
                 errors['save'] = 'Profile was not saved. Please retry. If you chose a photo, choose it again.'
             else:
@@ -178,6 +183,21 @@ def profile_page():
                 flash('Profile updated successfully!', 'success')
                 return redirect(url_for('volunteer.profile_page'))
 
+    return _render_profile(errors=errors, selected_skills=selected_skills,
+                           selected_interests=selected_interests, status=422 if errors else 200)
+
+
+def _render_profile(errors=None, selected_skills=None, selected_interests=None,
+                    account_section=None, account_errors=None, account_values=None, status=200):
+    profile = VolunteerProfile.query.filter_by(user_id=current_user.id).first()
+    if selected_skills is None:
+        selected_skills = [str(skill.id) for skill in current_user.skills]
+    if selected_interests is None:
+        selected_interests = [str(interest.id) for interest in current_user.interests]
+    values = dict(name=current_user.name, campus_id=str(current_user.campus_id or ''),
+                  college_affiliation=current_user.college_affiliation or '')
+    values.update(account_values or {})
+    campuses = campus_rows()
     # ── Analytics: impact stats ─────────────────────────────────────────
     total_activities = Registration.query.filter_by(
         user_id=current_user.id).count()
@@ -232,12 +252,118 @@ def profile_page():
         registrations=registrations,
         recommendations=recommendations,
         recommendations_error=recommendations_error,
-        errors=errors,
+        errors=errors or {},
+        account_section=account_section,
+        account_errors=account_errors or {},
+        account_values=values,
+        campuses=campuses,
+        affiliation_options={str(campus.id): campus_affiliations(campus) for campus in campuses},
+        password_min=password_min_length(),
         selected_skills=selected_skills,
         selected_interests=selected_interests,
         skill_catalog=Skill.query.order_by(Skill.name).all(),
         interest_catalog=Interest.query.order_by(Interest.name).all(),
-    ), (422 if errors else 200)
+    ), status
+
+
+def _account_failure(section, errors, values=None, status=422):
+    return _render_profile(account_section=section, account_errors=errors,
+                           account_values=values, status=status)
+
+
+def _save_account(section, changes, details=None):
+    try:
+        for key, value in changes.items():
+            setattr(current_user, key, value)
+        log_activity(f'profile_{section}_changed', current_user._get_current_object(), details)
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.warning('Profile account save failed; transaction rolled back')
+        return _account_failure(section, {'save': 'Changes were not saved. Please retry.'},
+                                {key: str(value or '') for key, value in changes.items()})
+    flash(f'{"Name" if section == "name" else "Campus"} updated.', 'success')
+    return redirect(url_for('volunteer.profile_page', _anchor=f'change-{section}'), code=303)
+
+
+@volunteer_bp.route('/profile/name', methods=['POST'])
+@login_required
+@role_required('volunteer')
+def change_name():
+    name = request.form.get('name', '').strip()
+    if not name or len(name) > 100 or not name.isprintable():
+        return _account_failure('name', {'name': 'Enter a name of 1–100 characters without control characters.'},
+                                {'name': name})
+    return _save_account('name', {'name': name})
+
+
+@volunteer_bp.route('/profile/campus', methods=['POST'])
+@login_required
+@role_required('volunteer')
+def change_campus():
+    value = request.form.get('campus_id', '')
+    college = request.form.get('college_affiliation', '').strip()
+    campus = official_campus(request.form.get('campus_id', type=int))
+    errors = {}
+    if campus is None:
+        errors['campus_id'] = 'Select one of the nine PSU campuses.'
+    elif college not in campus_affiliations(campus):
+        errors['college_affiliation'] = 'Select a college for the chosen campus.'
+    if errors:
+        return _account_failure('campus', errors, dict(campus_id=value, college_affiliation=college))
+    return _save_account('campus', dict(campus_id=campus.id, college_affiliation=college),
+                         dict(campus_from=current_user.campus_id, campus_to=campus.id))
+
+
+@volunteer_bp.route('/profile/password', methods=['POST'])
+@login_required
+@role_required('volunteer')
+def change_password():
+    errors = {}
+    try:
+        user = User.query.filter_by(id=current_user.id).populate_existing().with_for_update().one()
+        if user.auth_version != session.get('auth_version'):
+            db.session.rollback()
+            return end_session('Your password changed in another session. Please sign in again.')
+        subject = AuthSecurityEvent.subject(f'password_change|{user.id}')
+        cutoff = datetime.utcnow() - timedelta(minutes=15)
+        # Locking reads see the latest failures even under MySQL repeatable-read isolation.
+        attempts = AuthSecurityEvent.query.with_entities(AuthSecurityEvent.id).filter(
+            AuthSecurityEvent.action == 'password_change', AuthSecurityEvent.subject_hash == subject,
+            AuthSecurityEvent.created_at >= cutoff).limit(5).with_for_update().all()
+        if len(attempts) >= 5:
+            db.session.rollback()
+            return _account_failure('password', {'current_password': 'Too many incorrect attempts. Try again in 15 minutes.'}, status=429)
+        current = request.form.get('current_password', '')
+        if not user.check_password(current):
+            db.session.add(AuthSecurityEvent(action='password_change', subject_hash=subject))
+            db.session.commit()
+            return _account_failure('password', {'current_password': 'Your current password is incorrect.'})
+        password = request.form.get('new_password', '')
+        message = password_error(password, password_min_length())
+        if message:
+            errors['new_password'] = message
+        elif user.check_password(password):
+            errors['new_password'] = 'Choose a password different from your current password.'
+        if password != request.form.get('password_confirmation', ''):
+            errors['password_confirmation'] = 'Enter the same new password in both fields.'
+        if errors:
+            db.session.rollback()
+            return _account_failure('password', errors)
+        user.set_password(password)
+        user.auth_version += 1
+        PasswordResetToken.query.filter_by(user_id=user.id, used_at=None).update(
+            {'used_at': datetime.utcnow()}, synchronize_session=False)
+        log_activity('profile_password_changed', user)
+        version = user.auth_version
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.warning('Profile password change failed; transaction rolled back')
+        return _account_failure('password', {'save': 'Password was not changed. Please retry.'})
+    session['auth_version'] = version
+    flash('Password changed. Your other sessions have been signed out.', 'success')
+    return redirect(url_for('volunteer.profile_page', _anchor='change-password'), code=303)
 
 
 @volunteer_bp.route('/profile/image/remove', methods=['POST'])

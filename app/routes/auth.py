@@ -13,7 +13,7 @@ import secrets
 import json
 from app.campuses import campus_affiliations, campus_query, official_campus
 import threading
-from app.models.user import (User, Interest, Skill, SystemSetting,
+from app.models.user import (User, Interest, Skill,
                              AuthSecurityEvent, PasswordResetToken)
 from app.models.notification import Notification
 from app.models.policy import (TermsRevision, TermsAcceptance, PrivacyRevision,
@@ -21,7 +21,7 @@ from app.models.policy import (TermsRevision, TermsAcceptance, PrivacyRevision,
 from app.models import db
 from app.services.email import send_email
 from app.services.session_idle import session_status
-from app.security import password_error
+from app.security import password_error, password_min_length as _password_min_length
 import time
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
@@ -67,15 +67,6 @@ def _record_attempt(action, subject=''):
 def _too_many_attempts():
     return render_template(
         'login.html', form_error='Too many attempts. Please wait and try again.'), 429
-
-
-def _password_min_length():
-    setting = SystemSetting.query.filter_by(
-        key='default_password_length').first()
-    try:
-        return max(8, int(setting.value)) if setting else 8
-    except (TypeError, ValueError):
-        return 8
 
 
 def _active_terms():

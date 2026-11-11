@@ -16,8 +16,9 @@ COPY app ./app
 COPY templates ./templates
 COPY static ./static
 COPY migrations ./migrations
+COPY data/historical_activities_2020_2025.csv ./data/historical_activities_2020_2025.csv
 COPY config.py wsgi.py ./
 RUN ln -s /data/public /app/static/uploads
 
 # Railway mounts /data at runtime. No schema setup or seeding in startup/build.
-CMD ["sh", "-c", "mkdir -p /data/public /data/private && exec gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 1 --timeout 120 wsgi:app"]
+CMD ["sh", "-c", "mkdir -p /data/public /data/private && exec gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 1 --worker-class gthread --threads 4 --timeout 120 wsgi:app"]

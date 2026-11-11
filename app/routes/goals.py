@@ -8,6 +8,8 @@ from xml.sax.saxutils import escape
 from flask import Blueprint, abort, flash, redirect, render_template, request, Response, url_for
 from flask_login import login_required, current_user
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
+from app.pagination import paginate
 
 from app.models import db
 from app.campuses import campus_query
@@ -190,6 +192,13 @@ def edit(proposal_id=None):
     if not director() and current_user.campus_id is None:
         abort(403)
     values = dict(proposal.payload) if proposal else {}
+    if not director() and not proposal:
+        values = dict(year=date.today().year, plan_type='AOP',
+                      program='Campus extension activities', code='COMPLETED-ACTIVITIES',
+                      name='Completed activities',
+                      definition='Count linked activities that have ended, with complete attendance records required for assessment.',
+                      unit='activities', evidence_basis='activities', comparison_rule='gte',
+                      source_document='PSU Volunteer Hub campus goal proposal', deadline='')
     replacement = None
     raw_replacement = request.args.get('revise', '') if not proposal else proposal.replaces_target_id
     if raw_replacement:
@@ -208,9 +217,13 @@ def edit(proposal_id=None):
                           deadline=replacement.deadline.isoformat() if replacement.deadline else '', evidence_basis=indicator.evidence_basis)
     error = None
     if request.method == 'POST':
-        values = request.form.to_dict()
+        values = {**values, **request.form.to_dict()} if not director() else request.form.to_dict()
         try:
             cleaned = validate_definition(values)
+            if not director() and cleaned['evidence_basis'] == 'activities':
+                target_value = number(cleaned['target_value'])
+                if target_value != target_value.to_integral_value():
+                    raise ReportError('Enter a whole number of completed activities.')
             action = request.form.get('action', 'save')
             if action not in ('save', 'submit', 'publish') or (action == 'publish' and not director()):
                 abort(400)
@@ -316,7 +329,26 @@ def review(proposal_id):
         except ReportError as exc:
             db.session.rollback()
             error = str(exc)
-    return render_template('goals/review.html', proposal=proposal, director=director(), error=error), 400 if error else 200
+    return render_template('goals/review.html', proposal=proposal, director=director(),
+                           error=error, rules=RULES, bases=BASES), 400 if error else 200
+
+
+@goals_bp.route('/targets/<int:target_id>/activities')
+@login_required
+@roles_required('coordinator', 'director', 'admin')
+def target_activities(target_id):
+    target = db.get_or_404(AnnualTarget, target_id)
+    if current_user.role == 'coordinator' and target.campus_id != current_user.campus_id:
+        abort(403)
+    year = target.indicator.plan.year
+    query = Event.query.join(AnnualActivityMapping).filter(
+        AnnualActivityMapping.target_id == target.id,
+        Event.date >= datetime(year, 1, 1), Event.date < datetime(year+1, 1, 1))
+    if target.campus_id is not None:
+        query = query.filter(Event.campus_id == target.campus_id)
+    pagination = paginate(query.options(joinedload(Event.campus)).order_by(Event.date.desc(), Event.id.desc()))
+    return render_template('goals/activities.html', target=target, pagination=pagination,
+                           activities=pagination.items, year=year)
 
 
 @goals_bp.route('/targets/<int:target_id>/evidence', methods=['GET', 'POST'])

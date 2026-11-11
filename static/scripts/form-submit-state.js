@@ -43,4 +43,5 @@
   });
 
   window.addEventListener('pageshow', restoreButtons);
+  document.addEventListener('form-submit-cancelled', restoreButtons);
 })();

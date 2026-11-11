@@ -152,6 +152,20 @@ body:has(.registration-list) .flash--success { background: var(--primary); }
   font-weight: 600;
 }
 
+.profile-account-settings { flex-basis: 100%; min-width: 0; }
+.profile-account-section { border-top: 1px solid var(--outline-variant); scroll-margin-top: 6rem; }
+.profile-account-section summary { min-height: 44px; padding-block: .85rem; color: var(--primary); font-weight: 600; cursor: pointer; }
+.profile-account-section form { display: grid; gap: .65rem; max-width: 34rem; padding-block: .5rem 1.25rem; }
+.profile-account-section form > * { min-width: 0; overflow-wrap: anywhere; }
+.profile-account-section :is(input, select, button) { min-height: 44px; max-width: 100%; }
+.profile-account-section label { font-weight: 600; }
+.profile-account-section p { margin: 0 0 .5rem; }
+.profile-password-input { display: flex; gap: .5rem; }
+.profile-password-input input { flex: 1; min-width: 0; }
+.profile-password-input button { flex-shrink: 0; }
+.profile-password-input button[hidden] { display: none; }
+.profile-account-section select { background: var(--surface, #fff); color: var(--on-surface, #001a41); width: 100%; }
+
 .profile-milestone,
 .profile-support {
   display: grid;

@@ -13,11 +13,11 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy import insert, update, case, or_
-from app.pagination import paginate
+from app.pagination import paginate, report_page
 from app.models import db
 from app.models.event import (ActivityCategory, Event, EventAnnouncement,
                               Registration, Attendance, Campus, Milestone,
-                              CancellationRequest, SdgGoal, ExternalParticipant)
+                              CancellationRequest, SdgGoal, capacity_query, ExternalParticipant)
 from app.utils.decorators import role_required, roles_required
 from app.models.notification import Notification, notify_campus_coordinators
 from app.models.notification import notify
@@ -26,7 +26,7 @@ from app.models.user import SystemSetting, User
 from app.recommendation.analytics import AnalyticsAggregator
 from app.dashboard import summarize_report, resolve_period, dashboard_evidence, consolidate_attention, annual_plan_summary
 from app.reports import (
-    build_events_report, render_csv, render_pdf, ReportError, parse_date_range)
+    build_events_report, batched_events_report, render_csv, render_pdf, ReportError, parse_date_range)
 from datetime import datetime, timedelta
 
 coordinator_bp = Blueprint('coordinator', __name__, url_prefix='')
@@ -191,9 +191,11 @@ def _campus_calendar(campus_id, year=None, month=None, dashboard=False):
     year, month = year or now.year, month or now.month
     if not 1 <= year <= 9999 or not 1 <= month <= 12:
         year, month = now.year, now.month
+    end = datetime.max if (year, month) == (9999, 12) else (
+        datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1))
     events = Event.query.filter_by(campus_id=campus_id).filter(
-        db.extract('year', Event.date) == year,
-        db.extract('month', Event.date) == month).order_by(Event.date, Event.id).all()
+        Event.date >= datetime(year, month, 1), Event.date <= end if end == datetime.max else Event.date < end
+    ).order_by(Event.date, Event.id).all()
     by_day = {}
     for event in events:
         by_day.setdefault(event.date.day, []).append(event)
@@ -228,7 +230,7 @@ def coordinator_dash():
         flash(str(exc), 'error')
         return redirect(url_for('coordinator.coordinator_dash'))
     evidence = dashboard_evidence({'campus_id': campus_id}, period)
-    pending, _ = build_events_report(campus_id=campus_id, attention='pending_attendance')
+    pending, _ = build_events_report(campus_id=campus_id, attention='pending_attendance', include_sdgs=False)
     pending.sort(key=lambda row: (row['end_date'], row['event_id']))
     evidence['attention_items'] = consolidate_attention(evidence['performance'], pending)
     for item in evidence['attention_items']:
@@ -262,16 +264,21 @@ def coordinator_dash():
                                        else Event.date <= date_value.replace(hour=23, minute=59, second=59))
             except ValueError:
                 flash('Use valid dates when filtering activities.', 'error')
-    events = events.options(selectinload(Event.sdgs), selectinload(Event.registrations)).order_by(
-        Event.date.asc() if status == 'upcoming' else Event.date.desc()).all()
+    events = events.distinct()
+    activity_ids = events.with_entities(Event.id).statement
+    pagination = paginate(capacity_query(events).options(selectinload(Event.sdgs)).order_by(
+        Event.date.asc() if status == 'upcoming' else Event.date.desc(), Event.id))
+    events = pagination.items
     calendar = _campus_calendar(campus_id, request.args.get('calendar_year', type=int),
                                 request.args.get('calendar_month', type=int), dashboard=True)
     pending_cancellations = CancellationRequest.query.join(Registration).join(Event).filter(
         Event.campus_id == campus_id,
         CancellationRequest.status == 'pending').count()
     recent_activities = Registration.query.filter(
-        Registration.event_id.in_([e.id for e in events])
-    ).order_by(Registration.registered_at.desc()).limit(5).all() if events else []
+        Registration.event_id.in_(activity_ids)
+    ).options(joinedload(Registration.event), joinedload(Registration.user),
+              joinedload(Registration.external_participant)).order_by(
+        Registration.registered_at.desc(), Registration.id.desc()).limit(5).all()
 
     campus_name = current_user.campus.name if current_user.campus else 'Campus'
 
@@ -280,6 +287,7 @@ def coordinator_dash():
                             **evidence,
                             **calendar,
                             events=events,
+                            pagination=pagination,
                             recent_activities=recent_activities,
                             selected_status=status,
                             selected_category=category, start_date=start_date,
@@ -846,7 +854,7 @@ def export_events_csv():
     try:
         export_period = resolve_period(dict(request.args, period=request.args.get('period', 'all')))
         start_date, end_date = export_period['start'], export_period['end']
-        rows, summary = build_events_report(
+        rows, summary = batched_events_report(
             campus_id=_coordinator_campus_id(), start_date=start_date,
             end_date=end_date, category=category,
             activity_name=request.args.get('activity_name', ''),
@@ -880,7 +888,7 @@ def export_events_pdf():
     try:
         export_period = resolve_period(dict(request.args, period=request.args.get('period', 'all')))
         start_date, end_date = export_period['start'], export_period['end']
-        rows, summary = build_events_report(
+        rows, summary = batched_events_report(
             campus_id=_coordinator_campus_id(), start_date=start_date,
             end_date=end_date, category=category,
             activity_name=request.args.get('activity_name', ''),
@@ -930,12 +938,15 @@ def analytics():
     end_date = period['end']
     category = request.args.get('category', '').strip()
     try:
-        evidence = dashboard_evidence(dict(campus_id=campus_id, category=category,
+        scope = dict(campus_id=campus_id, category=category,
             activity_name=request.args.get('activity_name', ''),
-            attention=request.args.get('attention', ''), event_id=request.args.get('event_id')), period)
+            attention=request.args.get('attention', ''), event_id=request.args.get('event_id'))
+        evidence = dashboard_evidence(scope, period)
     except ReportError as exc:
         abort(400, description=str(exc))
     report_rows, report_summary = evidence['evidence_rows'], evidence['evidence_summary']
+    pagination = report_page(dict(scope, start_date=start_date, end_date=end_date),
+                             report_summary['event_count'])
     report_query = request.args.to_dict()
     report_query.update(start_date=start_date, end_date=end_date)
 
@@ -946,7 +957,7 @@ def analytics():
                             campus_name=campus_name,
                             attendance_summary=attendance_summary,
                             categories=categories,
-                            report_rows=report_rows,
+                            report_rows=pagination.items, pagination=pagination,
                             report_summary=report_summary,
                             dashboard_data=summarize_report(report_rows))
 

@@ -8,6 +8,7 @@ from flask import Flask, request, redirect, url_for, session
 from flask_login import LoginManager, current_user
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.local import LocalProxy
 from sqlalchemy.orm import joinedload, selectinload
 from app.models import db
 from app.models.user import User, SystemSetting
@@ -69,6 +70,8 @@ def create_app(config_name=None):
 
     # Initialize extensions
     db.init_app(app)
+    from app.performance import init_performance
+    init_performance(app, db)
     CSRFProtect(app)
     from app.errors import register_error_handlers
     register_error_handlers(app)
@@ -98,7 +101,12 @@ def create_app(config_name=None):
 
     @login_manager.user_loader
     def load_user(user_id):
-        return db.session.get(User, int(user_id))
+        options = [joinedload(User.campus)]
+        if request.endpoint in ('events.volunteer_dash', 'events.register_for_event'):
+            options.extend((joinedload(User.skills), joinedload(User.interests)))
+        if request.endpoint == 'events.volunteer_dash':
+            options.append(joinedload(User.profile))
+        return db.session.get(User, int(user_id), options=options)
 
     @app.before_request
     def require_current_terms():
@@ -118,15 +126,18 @@ def create_app(config_name=None):
             return None
         from app.models.policy import (TermsRevision, TermsAcceptance, PrivacyRevision,
                                        PrivacyAcknowledgement)
-        revision = TermsRevision.query.filter_by(is_active=True).order_by(
-            TermsRevision.published_at.desc()).first()
-        if revision and not TermsAcceptance.query.filter_by(
-                user_id=current_user.id, revision_id=revision.id).first():
+        terms_id = db.select(TermsRevision.id).where(TermsRevision.is_active.is_(True)).order_by(
+            TermsRevision.published_at.desc()).limit(1).scalar_subquery()
+        privacy_id = db.select(PrivacyRevision.id).where(PrivacyRevision.is_active.is_(True)).order_by(
+            PrivacyRevision.published_at.desc()).limit(1).scalar_subquery()
+        revision, terms_accepted, privacy, privacy_accepted = db.session.execute(db.select(
+            terms_id, db.exists().where(TermsAcceptance.user_id == current_user.id,
+                                       TermsAcceptance.revision_id == terms_id),
+            privacy_id, db.exists().where(PrivacyAcknowledgement.user_id == current_user.id,
+                                         PrivacyAcknowledgement.revision_id == privacy_id))).one()
+        if revision and not terms_accepted:
             return redirect(url_for('auth.accept_terms'))
-        privacy = PrivacyRevision.query.filter_by(is_active=True).order_by(
-            PrivacyRevision.published_at.desc()).first()
-        if privacy and not PrivacyAcknowledgement.query.filter_by(
-                user_id=current_user.id, revision_id=privacy.id).first():
+        if privacy and not privacy_accepted:
             session['privacy_next'] = request.full_path if request.query_string else request.path
             return redirect(url_for('auth.accept_privacy'))
         if current_user.role == 'volunteer' and not current_user.sex:
@@ -137,6 +148,9 @@ def create_app(config_name=None):
     @app.before_request
     def validate_campus_choices():
         if request.endpoint in ('static', 'favicon') or request.routing_exception:
+            return None
+        if request.endpoint in ('volunteer.change_name', 'volunteer.change_campus',
+                                'volunteer.change_password'):
             return None
         from flask import abort
         for source in (request.args, request.form):
@@ -185,12 +199,14 @@ def create_app(config_name=None):
     def inject_notifications():
         from flask_login import current_user
         if current_user.is_authenticated:
-            try:
-                unread = Notification.query.filter_by(
-                    user_id=current_user.id, is_read=False).count()
-            except Exception:
-                unread = 0
-            return {'unread_notifications': unread}
+            def unread():
+                try:
+                    from app.performance import request_value
+                    return request_value(('unread', current_user.id), lambda: Notification.query.filter_by(
+                        user_id=current_user.id, is_read=False).count())
+                except Exception:
+                    return 0
+            return {'unread_notifications': LocalProxy(unread)}
         return {'unread_notifications': 0}
 
     from app.pagination import page_url
@@ -214,13 +230,13 @@ def create_app(config_name=None):
     def home():
         from flask import render_template
         from datetime import datetime
-        from app.models.event import Event, HistoricalActivity
+        from app.models.event import Event, HistoricalActivity, capacity_query
 
         now = datetime.now()
-        featured_events = Event.query.filter(
+        featured_events = capacity_query(Event.query).filter(
             Event.date > now,
             Event.slots > 0,
-        ).options(joinedload(Event.campus), selectinload(Event.registrations)
+        ).options(joinedload(Event.campus)
         ).order_by(Event.date.asc()).limit(6).all()
         completed_at = db.func.coalesce(Event.end_date, Event.date)
         completed_events = Event.query.filter(

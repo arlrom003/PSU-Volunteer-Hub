@@ -2,6 +2,15 @@
 import re
 
 
+def password_min_length():
+    from app.models.user import SystemSetting
+    setting = SystemSetting.query.filter_by(key='default_password_length').first()
+    try:
+        return max(8, int(setting.value)) if setting else 8
+    except (TypeError, ValueError):
+        return 8
+
+
 def password_error(password, minimum=8):
     if not password:
         return 'Password is required.'

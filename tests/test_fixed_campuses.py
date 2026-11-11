@@ -96,6 +96,7 @@ def test_production_startup_rejects_custom_catalogue(app, monkeypatch, tmp_path)
     with engine.begin() as connection:
         connection.execute(Campus.__table__.insert().values(name='Custom Campus', code='CUSTOM'))
     monkeypatch.setattr(ProductionConfig, 'SQLALCHEMY_DATABASE_URI', str(engine.url))
+    monkeypatch.setattr(ProductionConfig, 'SQLALCHEMY_ENGINE_OPTIONS', {})
     monkeypatch.setattr(ProductionConfig, 'SECRET_KEY', 'isolated-campus-startup-test')
     with pytest.raises(ValueError, match='Custom Campus'):
         create_app('production')

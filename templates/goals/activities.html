@@ -1,0 +1,10 @@
+{% extends 'layouts/role_base.html' %}
+{% from 'partials/pagination.html' import pages with context %}
+{% block title %}Linked goal activities · PSU Volunteer Hub{% endblock %}
+{% block content %}
+<header class="page-heading"><div><h1>Activities supporting {{ target.indicator.name }}</h1><p>{{ year }} · {{ target.campus.name if target.campus else 'University' }} targets</p></div><a class="btn btn--outline" href="{{ url_for('goals.details', year=year, campus=target.campus_id) }}">Back to Goal Evidence</a></header>
+<section class="panel"><ul class="clean-list">
+{% for activity in activities %}<li><a class="btn btn--outline" href="{{ url_for('coordinator.analytics' if current_user.role == 'coordinator' else 'director.analytics', event_id=activity.id, start_date=year|string ~ '-01-01', end_date=year|string ~ '-12-31') }}#decision-records">{{ activity.title }}</a><p>{{ activity.date.strftime('%b %d, %Y') }} · {{ activity.campus.name if activity.campus else 'Unassigned campus' }}</p></li>
+{% else %}<li>No activities are linked within this goal’s year and campus scope. Review the goal’s supporting evidence.</li>{% endfor %}
+</ul>{{ pages(pagination, 'Linked goal activity pages') }}</section>
+{% endblock %}

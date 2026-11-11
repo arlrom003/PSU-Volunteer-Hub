@@ -11,6 +11,7 @@ from config import DevelopmentConfig, ProductionConfig
 @pytest.fixture
 def production_settings(monkeypatch):
     monkeypatch.setattr(ProductionConfig, 'SQLALCHEMY_DATABASE_URI', 'sqlite:///:memory:')
+    monkeypatch.setattr(ProductionConfig, 'SQLALCHEMY_ENGINE_OPTIONS', {})
     monkeypatch.setattr(ProductionConfig, 'SECRET_KEY', 'isolated-production-startup-test-only')
 
 

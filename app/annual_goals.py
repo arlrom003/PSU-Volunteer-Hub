@@ -6,10 +6,15 @@ from flask_login import current_user
 from collections import defaultdict
 import operator
 from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy import case, cast, String, func
+from flask import has_request_context
+from app.performance import request_value
+from app.models import db
 
 from app.models.annual_plan import (AnnualPlan, AnnualIndicator, AnnualTarget,
                                    AnnualResult, AnnualGoalProposal, AnnualActivityMapping)
-from app.models.event import Campus, Registration, Event
+from app.models.event import Campus, Registration, Event, Attendance, ExternalParticipant
+from app.models.user import User
 from app.reports import ReportError
 
 RULES = {'gte': ('At least', operator.ge), 'lte': ('At most', operator.le), 'eq': ('Exactly', operator.eq)}
@@ -86,20 +91,23 @@ def registrations(year, campus_id=None, event_ids=None):
 
 def participation(year, campus_id=None, basis='verified_attendance'):
     counts = dict.fromkeys(SEX_LABELS, 0)
-    seen = set()
-    for reg in registrations(year, campus_id):
-        present = bool(reg.attendance_record and reg.attendance_record.status == 'present')
-        if basis != 'registrations' and not present:
-            continue
-        if basis == 'completed' and reg.status != 'completed':
-            continue
-        identity = ('user', reg.user_id) if reg.user_id else ('external', reg.external_participant_id)
-        if basis == 'unique_attendees' and identity in seen:
-            continue
-        seen.add(identity)
-        person = reg.participant
-        sex = person.sex if person and person.sex in SEX_LABELS else 'unrecorded'
-        counts[sex] += 1
+    recorded_sex = case((Registration.user_id.isnot(None), cast(User.sex, String)),
+                        else_=cast(ExternalParticipant.sex, String))
+    sex = case((recorded_sex.in_(SEX_LABELS), recorded_sex), else_='unrecorded')
+    count = _unique_participants() if basis == 'unique_attendees' else func.count(Registration.id)
+    query = db.session.query(sex, count).select_from(Registration).join(Event).outerjoin(
+        Attendance, Attendance.registration_id == Registration.id).outerjoin(
+        User, User.id == Registration.user_id).outerjoin(
+        ExternalParticipant, ExternalParticipant.id == Registration.external_participant_id).filter(
+        Registration.status != 'cancelled', Event.date >= datetime(year, 1, 1),
+        Event.date < datetime.combine(cutoff_for(year), datetime.max.time()))
+    if campus_id is not None:
+        query = query.filter(Event.campus_id == campus_id)
+    if basis != 'registrations':
+        query = query.filter(Attendance.status == 'present')
+    if basis == 'completed':
+        query = query.filter(Registration.status == 'completed')
+    counts.update(dict(query.group_by(sex).all()))
     total = sum(counts.values())
     highest = max((counts[key] for key in SEX_LABELS if key != 'unrecorded'), default=0)
     leaders = [SEX_LABELS[key] for key in SEX_LABELS if key != 'unrecorded' and counts[key] == highest] if highest else []
@@ -122,17 +130,18 @@ def target_row(target, year, evidence=None):
     elif mappings:
         if evidence is None:
             evidence = _activity_evidence([target], year)
-        reports, registrations_by_event = evidence
+        reports, target_counts = evidence
         rows = [reports[event.id] for event in mappings if event.id in reports
                 and (target.campus_id is None or event.campus_id == target.campus_id)]
         eligible = [row for row in rows if row['ended']]
         verified = bool(eligible) and all(row['attendance_complete'] for row in eligible)
-        regs = [reg for row in eligible for reg in registrations_by_event[row['event_id']]]
-        present = [reg for reg in regs if reg.attendance_record and reg.attendance_record.status == 'present']
+        registrations_count = sum(row['registrations'] for row in eligible)
+        present = sum(row['outcome_attended'] for row in eligible)
+        completed = sum(row['verified_completed'] for row in eligible)
+        unique = target_counts.get(target.id, 0)
         basis = indicator.evidence_basis
-        actual = {'activities': len(eligible), 'registrations': len(regs), 'verified_attendance': len(present),
-                  'completed': sum(reg.status == 'completed' for reg in present),
-                  'unique_attendees': len({('user', reg.user_id) if reg.user_id else ('external', reg.external_participant_id) for reg in present})}[basis]
+        actual = {'activities': len(eligible), 'registrations': registrations_count, 'verified_attendance': present,
+                  'completed': completed, 'unique_attendees': unique}[basis]
         source = 'Linked activity records'
         coverage = f'{len(eligible)} ended activities; complete attendance required for target assessment.'
     if actual is None:
@@ -164,19 +173,36 @@ def summarize(rows, year, campus_id=None, sample=False):
                 status='No approved targets' if not rows else 'All targets met' if met == len(rows) else 'Evidence pending' if pending else 'Targets remaining')
 
 
+def _unique_participants():
+    return (func.count(func.distinct(Registration.user_id)) +
+            func.count(func.distinct(case((Registration.user_id.is_(None),
+                                           Registration.external_participant_id)))))
+
+
 def _activity_evidence(targets, year):
     from app.reports import build_events_report
     event_ids = {mapping.event_id for target in targets
                  if target.indicator.evidence_basis != 'approved_aggregate'
                  for mapping in target.activity_mappings}
-    by_event = defaultdict(list)
     if not event_ids:
-        return {}, by_event
+        return {}, {}
     rows, _ = build_events_report(event_ids=event_ids, start_date=f'{year}-01-01',
-                                  end_date=cutoff_for(year).isoformat())
-    for reg in registrations(year, event_ids=event_ids):
-        by_event[reg.event_id].append(reg)
-    return {row['event_id']: row for row in rows}, by_event
+                                  end_date=cutoff_for(year).isoformat(), include_sdgs=False)
+    counts = db.session.query(
+        AnnualActivityMapping.target_id, _unique_participants(),
+    ).join(AnnualTarget, AnnualTarget.id == AnnualActivityMapping.target_id).join(
+        Event, Event.id == AnnualActivityMapping.event_id).join(
+        Registration, Registration.event_id == Event.id).outerjoin(
+        Attendance, Attendance.registration_id == Registration.id).filter(
+        AnnualActivityMapping.target_id.in_([target.id for target in targets
+                                            if target.indicator.evidence_basis == 'unique_attendees']),
+        (AnnualTarget.campus_id.is_(None) | (AnnualTarget.campus_id == Event.campus_id)),
+        Event.id.in_([row['event_id'] for row in rows if row['ended']]),
+        Registration.status != 'cancelled',
+        Attendance.status == 'present',
+        Event.date < datetime.combine(cutoff_for(year), datetime.max.time())
+    ).group_by(AnnualActivityMapping.target_id).all()
+    return {row['event_id']: row for row in rows}, dict(counts)
 
 
 def _summaries(year, campus_ids):
@@ -185,8 +211,9 @@ def _summaries(year, campus_ids):
         AnnualTarget.campus_id.in_([campus for campus in campus_ids if campus is not None]) |
         (AnnualTarget.campus_id.is_(None) if None in campus_ids else False)
     ).options(joinedload(AnnualTarget.indicator).joinedload(AnnualIndicator.plan),
-              selectinload(AnnualTarget.results),
-              selectinload(AnnualTarget.activity_mappings).joinedload(AnnualActivityMapping.event)
+              joinedload(AnnualTarget.results),
+              selectinload(AnnualTarget.activity_mappings).joinedload(AnnualActivityMapping.event).load_only(
+                  Event.id, Event.title, Event.campus_id)
     ).order_by(AnnualTarget.id).all()
     evidence = _activity_evidence(targets, year)
     by_campus = defaultdict(list)
@@ -219,7 +246,21 @@ def summary(year=None, campus_id=None, sample=False):
     year = selected_year(year)
     if sample:
         return summarize(sample_rows(campus_id), year, campus_id, True)
+    if has_request_context() and getattr(current_user, 'role', None) in ('director', 'admin'):
+        return dict(_university_summaries(year)[campus_id])
     return _summaries(year, [campus_id])[campus_id]
+
+
+def _university_summaries(year):
+    def load():
+        ids = [campus.id for campus in _campuses()]
+        return _summaries(year, [None, *ids])
+    return request_value(('annual-summaries', year), load)
+
+
+def _campuses():
+    from app.campuses import campus_rows
+    return campus_rows()
 
 
 def sample_rows(campus_id):
@@ -248,9 +289,9 @@ def sample_rows(campus_id):
 
 def comparisons(year=None, sample=False):
     year = selected_year(year)
-    campuses = Campus.query.order_by(Campus.name, Campus.id).all()
+    campuses = _campuses()
     plans = ({campus.id: summarize(sample_rows(campus.id), year, campus.id, True) for campus in campuses}
-             if sample else _summaries(year, [campus.id for campus in campuses]))
+             if sample else _university_summaries(year))
     return [dict(plans[campus.id], campus=campus.name) for campus in campuses]
 
 

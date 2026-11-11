@@ -16,6 +16,7 @@ function setup({ confirmed = true } = {}) {
     dataset: { attendanceBulk: status }, addEventListener(name, handler) { listeners[status] = handler; }
   }));
   const workspace = {
+    addEventListener(name, handler) { listeners[`workspace:${name}`] = handler; },
     querySelectorAll(selector) {
       if (selector === '[data-attendance-status]') return selects;
       if (selector === '[data-attendance-count]') return nodes;
@@ -28,10 +29,12 @@ function setup({ confirmed = true } = {}) {
   vm.runInNewContext(fs.readFileSync(
     path.join(__dirname, '../static/scripts/attendance-workspace.js'), 'utf8'), {
     document: { querySelector() { return workspace; } },
-    window: { confirm(message) { confirmation = message; return confirmed; } },
+    window: { confirm(message) { confirmation = message; return confirmed; },
+      addEventListener(name, handler) { listeners[`window:${name}`] = handler; } },
   });
   const values = () => Object.fromEntries(nodes.map(node => [node.dataset.attendanceCount, node.textContent]));
-  return { selects, values, changeStatus, click(status) { listeners[status](); }, confirmation: () => confirmation };
+  return { selects, values, changeStatus, click(status) { listeners[status](); }, confirmation: () => confirmation,
+    leave(event) { listeners['window:beforeunload'](event); }, submit() { listeners['workspace:submit'](); } };
 }
 
 test('attendance workspace updates counts and changes every visible status after confirmation', () => {
@@ -49,4 +52,22 @@ test('cancelled bulk confirmation leaves attendance statuses unchanged', () => {
   ui.click('absent');
   assert.deepEqual(ui.selects.map(select => select.value), ['', 'excused']);
   assert.equal(ui.changeStatus.textContent, '');
+});
+
+test('leaving warns only for unsaved changes and submitting allows navigation', () => {
+  const ui = setup();
+  let blocked = 0;
+  const event = { preventDefault() { blocked += 1; } };
+  ui.leave(event);
+  assert.equal(blocked, 0);
+  ui.selects[0].value = 'present';
+  ui.leave(event);
+  assert.equal(blocked, 1);
+  ui.selects[0].value = '';
+  ui.leave(event);
+  assert.equal(blocked, 1);
+  ui.click('absent');
+  ui.submit();
+  ui.leave(event);
+  assert.equal(blocked, 1);
 });

@@ -434,6 +434,10 @@ administrator which SMTP relay or permitted sender account to use.
 
 ## Technology
 
+Query measurement, disposable load tests, index preview/apply/rollback, and the
+Demo-first release procedure are documented in
+[Performance rollout](docs/operations/PERFORMANCE_ROLLOUT.md).
+
 - **Backend:** Flask, SQLAlchemy, Flask-Login, Werkzeug
 - **Database:** MySQL/MariaDB; SQLite for isolated development
 - **Recommendations:** content-based cosine similarity using scikit-learn

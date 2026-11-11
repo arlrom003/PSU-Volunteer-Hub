@@ -1,4 +1,5 @@
 {% extends 'layouts/role_base.html' %}
+{% from 'partials/pagination.html' import pages with context %}
 {% set active_page = "dashboard" %}
 {% set tour_page = true %}
 {% block title %}Volunteer Dashboard | PSU Volunteer Hub{% endblock %}
@@ -52,7 +53,7 @@
   role="gridcell"
 >{% if day %}<strong>{{ day }}</strong>{% for registration in calendar_events.get(day, []) %}<a
   class="calendar-entry"
-  href="#registration-{{ registration.id }}"
+  href="{{ url_for('events.opportunity_detail', event_id=registration.event_id) }}"
 >{{ registration.event.title }}<small>{{ registration.event.date.strftime("%I:%M %p") }}{% if registration.cancellation_request and registration.cancellation_request.status == 'pending' %} · Cancellation pending{% endif %}</small></a>{% endfor %}{% endif %}</div>{% endfor %}{% endfor %}</div>
     {% if not calendar_events %}<div class="empty-state">No active registrations this month. Use month navigation to review future commitments.</div>{% endif %}
   </section>
@@ -100,13 +101,7 @@
     {% if registration.cancellation_request %}{% include 'partials/cancellation_decision.html' %}{% endif %}
     {% if item.cancellation_state.can_request %}<a class="btn btn--danger" href="{{ url_for('events.cancel_registration', registration_id=registration.id, **dashboard_query) }}">Request cancellation</a>{% endif %}
   </div>
-</article>{% endfor %}</div>{% if shown_registrations < registration_total %}<a
-  class="btn btn--outline"
-  href="{{ url_for('events.volunteer_dash', show=shown_registrations + 5, **registration_filters) }}"
->Show 5 more</a>{% endif %}{% if shown_registrations > 5 %}<a
-  class="btn btn--ghost"
-  href="{{ url_for('events.volunteer_dash', **registration_filters) }}"
->Show less</a>{% endif %}{% else %}<div class="empty-state">{% if has_registrations %}<h3>No registrations match these filters</h3><p>Clear the filters to see your registrations.</p><a class="button button--secondary" href="{{ url_for('events.volunteer_dash') }}">Clear filters</a>{% else %}<h3>No registrations yet</h3><p>Browse upcoming activities and choose an opportunity to join.</p><a class="button button--primary" href="{{ url_for('events.opportunities') }}">Browse opportunities</a>{% endif %}</div>{% endif %}
+</article>{% endfor %}</div>{{ pages(pagination, 'Registration history pages') }}{% else %}<div class="empty-state">{% if has_registrations %}<h3>No registrations match these filters</h3><p>Clear the filters to see your registrations.</p><a class="button button--secondary" href="{{ url_for('events.volunteer_dash') }}">Clear filters</a>{% else %}<h3>No registrations yet</h3><p>Browse upcoming activities and choose an opportunity to join.</p><a class="button button--primary" href="{{ url_for('events.opportunities') }}">Browse opportunities</a>{% endif %}</div>{% endif %}
   </section>
   <div class="content-grid">
     <section class="panel" data-tour-id="opportunities">

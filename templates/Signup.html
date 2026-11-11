@@ -1,5 +1,6 @@
 {% extends 'layouts/auth_base.html' %}
 {% from 'partials/auth_forms.html' import brand, field, select_field, error_summary with context %}
+{% from 'partials/password_feedback.html' import password_feedback %}
 {% set errors = errors|default({}) %}
 {% block title %}Create account | PSU Volunteer Hub{% endblock %}
 {% block body %}
@@ -47,6 +48,7 @@
             {{ field('Password', 'password', errors, type='password', autocomplete='new-password', minlength=password_min or 8, hint='Use at least ' ~ (password_min or 8) ~ ' characters with uppercase, lowercase, a number, and a special character.') }}
             {{ field('Confirm password', 'password_confirmation', errors, type='password', autocomplete='new-password', minlength=password_min or 8, hint='Enter the same password again.') }}
           </div>
+          {{ password_feedback('password', 'password_confirmation', password_min or 8) }}
         </fieldset>
         <section class="auth-preferences" aria-label="Your volunteer selections">
           <p>Review your volunteer interests and skills before creating your account.</p>

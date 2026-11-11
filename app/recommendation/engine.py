@@ -14,7 +14,8 @@ Cosine similarity = |shared terms| / sqrt(|user terms| * |event terms|)
 import re
 from datetime import datetime
 from sklearn.metrics.pairwise import cosine_similarity
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload, load_only
+from sqlalchemy import insert
 from app.models.event import Event, RecommendationLog, Registration
 from app.models.user import User, Skill, Interest
 from app.models import db
@@ -77,7 +78,7 @@ def _cosine_similarity(user_terms: set, event_terms: set) -> float:
     return float(cosine_similarity(user_vector, event_vector)[0][0])
 
 
-def get_recommendations(volunteer_profile, events=None, top_n=5, campus_id=None):
+def get_recommendations(volunteer_profile, events=None, top_n=5, campus_id=None, commit=True):
     """
     Score events for a volunteer using cosine similarity over
     combined skill + interest/category terms.
@@ -120,17 +121,21 @@ def get_recommendations(volunteer_profile, events=None, top_n=5, campus_id=None)
     else:
         candidates = Event.query.filter(
             db.not_(Event.id.in_(registered_ids))
-        ).filter(Event.date >= datetime.now()).options(selectinload(Event.required_skills_rel)
-        ).order_by(Event.date.asc()).limit(50).all()
+        ).filter(Event.date >= datetime.now()).options(selectinload(Event.required_skills_rel),
+            load_only(Event.id, Event.date, Event.category)).order_by(Event.date.asc(), Event.id).all()
 
     scored = []
+    similarities = {}
     for event in candidates:
         event_skills = normalize_terms(s.name for s in event.required_skills_rel)
         event_terms = set(event_skills)
         if event.category:
             event_terms |= normalize_terms([event.category])
 
-        score = _cosine_similarity(user_terms, event_terms)
+        terms_key = frozenset(event_terms)
+        if terms_key not in similarities:
+            similarities[terms_key] = _cosine_similarity(user_terms, event_terms)
+        score = similarities[terms_key]
         matched = user_terms & event_terms
 
         # Participation-history weighting: a small, capped boost when this event's
@@ -148,7 +153,10 @@ def get_recommendations(volunteer_profile, events=None, top_n=5, campus_id=None)
 
     scored.sort(key=lambda x: x['score'], reverse=True)
     top = scored[:top_n]
-    _log_recommendations(user, top)
+    if top:
+        Event.query.filter(Event.id.in_([item['event'].id for item in top])).options(
+            joinedload(Event.campus)).populate_existing().all()
+    _log_recommendations(user, top, commit=commit)
     return top
 
 
@@ -166,7 +174,7 @@ def _cold_start_recommendations(events=None, limit=5, campus_id=None):
 
     reg_counts = dict(
         db.session.query(Registration.event_id, db.func.count(Registration.id))
-        .group_by(Registration.event_id).all()
+        .filter(Registration.event_id.in_([event.id for event in events])).group_by(Registration.event_id).all()
     )
 
     events = sorted(
@@ -174,16 +182,20 @@ def _cold_start_recommendations(events=None, limit=5, campus_id=None):
         key=lambda e: (reg_counts.get(e.id, 0), e.date.timestamp() * -1),
         reverse=True,
     )
+    top = events[:limit]
+    if top:
+        Event.query.filter(Event.id.in_([event.id for event in top])).options(
+            joinedload(Event.campus)).populate_existing().all()
     return [{
         'event': e,
         'score': 0,
         'matched_skills': set(),
         'matched_interests': set(),
         'percentage': 0,
-    } for e in events[:limit]]
+    } for e in top]
 
 
-def bootstrap_from_event(user, event, top_skills=3):
+def bootstrap_from_event(user, event, top_skills=3, commit=True):
     """
     Seed a cold-start volunteer's skills/interests from their first
     registered event, so future recommendations become personalized.
@@ -203,16 +215,14 @@ def bootstrap_from_event(user, event, top_skills=3):
         db.session.add(interest)
         user.interests.append(interest)
 
-    db.session.commit()
+    if commit:
+        db.session.commit()
 
 
-def _log_recommendations(user, recommendations):
+def _log_recommendations(user, recommendations, commit=True):
     """Persist recommendation results for analysis."""
-    for rec in recommendations:
-        log = RecommendationLog(
-            user_id=user.id,
-            event_id=rec['event'].id,
-            similarity_score=rec['score'],
-        )
-        db.session.add(log)
-    db.session.commit()
+    if recommendations:
+        db.session.execute(insert(RecommendationLog), [dict(user_id=user.id,
+            event_id=rec['event'].id, similarity_score=rec['score']) for rec in recommendations])
+    if commit:
+        db.session.commit()

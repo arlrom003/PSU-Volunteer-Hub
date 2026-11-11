@@ -6,6 +6,15 @@
   const countNodes = [...workspace.querySelectorAll('[data-attendance-count]')];
   const changeStatus = workspace.querySelector('[data-attendance-change-status]');
   const labels = { present: 'Present', absent: 'Absent' };
+  const initial = statuses.map(select => select.value);
+  let submitting = false;
+  workspace.addEventListener('submit', () => { submitting = true; });
+  window.addEventListener('beforeunload', event => {
+    if (!submitting && statuses.some((select, index) => select.value !== initial[index])) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  });
 
   const updateCounts = () => {
     const counts = { registered: statuses.length, present: 0, absent: 0, excused: 0, unmarked: 0 };

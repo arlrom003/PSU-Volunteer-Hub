@@ -215,6 +215,7 @@ def test_production_rejects_invalid_proxy_count(monkeypatch, count):
 
 def test_forwarded_host_is_ignored(monkeypatch):
     monkeypatch.setattr(ProductionConfig, 'SQLALCHEMY_DATABASE_URI', 'sqlite:///:memory:')
+    monkeypatch.setattr(ProductionConfig, 'SQLALCHEMY_ENGINE_OPTIONS', {})
     monkeypatch.setattr(ProductionConfig, 'SECRET_KEY', 'dummy-test-only')
     monkeypatch.setattr(ProductionConfig, 'TRUSTED_PROXY_COUNT', 1)
     production = create_app('production')

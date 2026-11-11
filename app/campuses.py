@@ -63,6 +63,11 @@ def campus_query():
         for name, code in PSU_CAMPUSES]))
 
 
+def campus_rows():
+    from app.performance import request_value
+    return request_value('official-campus-rows', lambda: campus_query().order_by(Campus.name, Campus.id).all())
+
+
 def validate_catalogue():
     rows = Campus.query.all()
     unsupported = [row for row in rows if (row.name, row.code) not in PSU_CAMPUSES]

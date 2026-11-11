@@ -11,6 +11,8 @@
 !static/**
 !migrations/
 !migrations/*.sql
+!data/
+!data/historical_activities_2020_2025.csv
 **/__pycache__/
 **/*.pyc
 static/uploads/

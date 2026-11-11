@@ -106,7 +106,7 @@ def test_awards_queries_are_bounded(system_app):
     with system_app.app_context(), query_count(system_app) as statements:
         awards = AnalyticsAggregator.award_leaderboards(REPORT_YEAR)
     assert len(awards['volunteers']) == 5
-    assert len(statements) == 5
+    assert len(statements) <= 4
 
 
 @pytest.mark.parametrize('path', ['/static/styles/base.css', '/static/scripts/form-submit-state.js',

@@ -5,9 +5,27 @@
 {% block content %}
 <header class="page-heading"><div><h1>{{ proposal.payload.name }}</h1><p>{{ proposal.campus.name if proposal.campus else 'University' }} · {{ proposal.status|capitalize }}</p></div><a class="btn btn--outline" href="{{ url_for('goals.workspace') }}">Back to workspace</a></header>
 {% if error %}<p role="alert" class="goal-form-error">{{ error }}</p>{% endif %}
-<dl class="goal-definition">{% for key,value in proposal.payload.items() %}<div><dt>{{ key|replace('_',' ')|capitalize }}</dt><dd>{{ value or 'Not supplied' }}</dd></div>{% endfor %}</dl>
+<dl class="goal-definition">
+  <div><dt>Year</dt><dd>{{ proposal.payload.year }}</dd></div>
+  <div><dt>Plan</dt><dd>{{ proposal.payload.plan_type }}</dd></div>
+  <div><dt>Responsible Office</dt><dd>{{ proposal.payload.responsible_office }}</dd></div>
+  <div><dt>Target</dt><dd>{{ rules[proposal.payload.comparison_rule][0] }} {{ proposal.payload.target_value|goal_number }} {{ proposal.payload.unit }}</dd></div>
+</dl>
+{% if proposal.payload.evidence_basis == 'activities' %}<p>Progress uses linked activities that have ended and have complete attendance records.</p>{% else %}<p>Progress uses {{ bases[proposal.payload.evidence_basis]|lower }}.</p>{% endif %}
 {% if proposal.review_note %}<p>Review note: {{ proposal.review_note }}</p>{% endif %}
-{% if director and proposal.status == 'submitted' %}<form method="post" class="goal-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="field goal-form__wide">Review explanation (required when returning)<textarea class="input" name="note" rows="3" maxlength="4000"></textarea></label><div class="panel__actions"><button class="btn btn--primary" name="action" value="approve">Approve campus goal</button><button class="btn btn--outline" name="action" value="return">Return for revision</button></div></form>{% endif %}
+{% if director and proposal.status == 'submitted' %}
+<form method="post" class="goal-form" autocomplete="off">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label class="field goal-form__wide">Review Note
+    <textarea class="input" name="note" rows="3" maxlength="4000" aria-describedby="review-note-help">{{ request.form.get('note', '') }}</textarea>
+    <span id="review-note-help">Required when returning a proposal for revision.</span>
+  </label>
+  <div class="goal-form__wide panel__actions">
+    <button class="btn btn--primary" name="action" value="approve">Approve Goal</button>
+    <button class="btn btn--outline" name="action" value="return">Return for Revision</button>
+  </div>
+</form>
+{% endif %}
 <details><summary>Proposal history</summary><ol>{% for item in proposal.history %}<li>{{ item.action|capitalize }} · {{ item.at }} · Account {{ item.actor }}{% if item.note %}: {{ item.note }}{% endif %}</li>{% endfor %}</ol></details>
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='scripts/annual-goals.js') }}"></script>{% endblock %}
