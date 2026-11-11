@@ -4,12 +4,14 @@ Flask Application Factory for PSU Volunteer Hub
 Creates and configures the Flask application instance.
 """
 import os
+from time import sleep
 from flask import Flask, request, redirect, url_for, session
 from flask_login import LoginManager, current_user
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.local import LocalProxy
 from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.exc import OperationalError
 from app.models import db
 from app.models.user import User, SystemSetting
 from app.models.event import (Event, Registration, Attendance, Milestone,
@@ -319,8 +321,22 @@ def create_app(config_name=None):
 
     if config_name == 'production':
         with app.app_context():
-            if db.inspect(db.engine).has_table('campuses'):
-                validate_catalogue()
+            # Database can wake after the web worker; retry reads, never skip validation.
+            for attempt in range(1, 6):
+                try:
+                    if db.inspect(db.engine).has_table('campuses'):
+                        validate_catalogue()
+                    break
+                except OperationalError as exc:
+                    db.session.remove()
+                    code = exc.orig.args[0] if exc.orig.args else None
+                    if code not in (2002, 2003, 2006, 2013) or attempt == 5:
+                        raise
+                    db.engine.dispose()
+                    app.logger.warning(
+                        'Startup database connection unavailable (MySQL code %s, '
+                        'attempt %s/5); retrying in 2 seconds.', code, attempt)
+                    sleep(2)
     return app
 
 
