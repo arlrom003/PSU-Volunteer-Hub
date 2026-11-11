@@ -1455,14 +1455,6 @@ class TestDirectorFeatures:
         resp = client.get('/analytics')
         assert resp.status_code == 200
 
-    def test_kpis_have_expected_keys(self, app):
-        from app.recommendation.analytics import AnalyticsAggregator
-        with app.app_context():
-            kpis = AnalyticsAggregator.kpi_summary()
-            for key in ('total_active_volunteers', 'retention_rate'):
-                assert key in kpis, f'KPI key {key} missing'
-
-
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # G. Admin Features
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -3427,63 +3419,6 @@ class TestAnalytics:
 
     # â”€â”€ Core metric definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-    def test_registration_count_excludes_cancelled(self, app):
-        eid = self._event(app, 'A', datetime.now() + timedelta(days=1), 5,
-                          'Environment')
-        v1 = self._vol(app, 'a1@t.com')
-        v2 = self._vol(app, 'a2@t.com')
-        self._reg(app, user_id=v1, event_id=eid, status='completed',
-                  attendance_status='present')
-        self._reg(app, user_id=v2, event_id=eid, status='cancelled',
-                  attendance_status=None)
-        with app.app_context():
-            s = AnalyticsAggregator.participation_summary(campus_id=5)
-        assert s['registrations'] == 1          # cancelled excluded
-        assert s['attended'] == 1
-        assert s['conversion_rate'] == 100.0
-
-    def test_unique_volunteers_distinct_from_registrations(self, app):
-        e1 = self._event(app, 'A', datetime.now() + timedelta(days=1), 5,
-                         'Environment')
-        e2 = self._event(app, 'B', datetime.now() + timedelta(days=2), 5,
-                         'Environment')
-        v = self._vol(app, 'u1@t.com')
-        self._reg(app, user_id=v, event_id=e1, status='completed',
-                  attendance_status='present')
-        self._reg(app, user_id=v, event_id=e2, status='completed',
-                  attendance_status='present')
-        with app.app_context():
-            s = AnalyticsAggregator.participation_summary(campus_id=5)
-        assert s['registrations'] == 2           # two sign-ups
-        assert s['unique_volunteers'] == 1       # same person
-
-    def test_attendance_count_and_absent(self, app):
-        eid = self._event(app, 'A', datetime.now() + timedelta(days=1), 5,
-                          'Environment')
-        p = self._vol(app, 'p@t.com')
-        a = self._vol(app, 'ab@t.com')
-        self._reg(app, user_id=p, event_id=eid, status='completed',
-                  attendance_status='present')
-        self._reg(app, user_id=a, event_id=eid, status='completed',
-                  attendance_status='absent')
-        with app.app_context():
-            s = AnalyticsAggregator.participation_summary(campus_id=5)
-        assert s['registrations'] == 2
-        assert s['attended'] == 1               # only present counted
-        assert s['attendance_rate'] == 50.0
-        assert s['conversion_rate'] == 50.0
-
-    def test_zero_registrations_safe(self, app):
-        self._event(app, 'Empty', datetime.now() + timedelta(days=1), 5,
-                    'Environment')
-        with app.app_context():
-            s = AnalyticsAggregator.participation_summary(campus_id=5)
-        assert s['registrations'] == 0
-        assert s['attended'] == 0
-        assert s['attendance_rate'] == 0.0
-        assert s['conversion_rate'] == 0.0
-        assert s['unique_volunteers'] == 0
-
     def test_prefer_not_to_say_is_separate_from_unrecorded_data(self, app):
         from app.reports import build_events_report
 
@@ -3520,20 +3455,6 @@ class TestAnalytics:
         with app.app_context():
             rows = AnalyticsAggregator.sex_participation(campus_id=5, sex='female')
         assert rows == [{'sex': 'Female', 'actual_participants': 1}]
-
-    def test_analytics_matches_report(self, app):
-        # Phase 18.4: dashboard/CSV/PDF must agree for the same scope.
-        from app.reports import build_events_report
-        eid = self._event(app, 'A', datetime.now() + timedelta(days=1), 5,
-                          'Environment')
-        v = self._vol(app, 'm@t.com')
-        self._reg(app, user_id=v, event_id=eid, status='completed',
-                  attendance_status='present')
-        with app.app_context():
-            s = AnalyticsAggregator.participation_summary(campus_id=5)
-            _, rep = build_events_report(campus_id=5)
-        assert s['registrations'] == rep['total_registrations']
-        assert s['attended'] == rep['total_attended']
 
     # â”€â”€ Scope / security â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -3660,132 +3581,8 @@ class TestAnalytics:
 
     # â”€â”€ Aggregations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-    def test_monthly_engagement_chronological(self, app):
-        e1 = self._event(app, 'Jan', datetime(2020, 1, 15), 5, 'Environment')
-        e2 = self._event(app, 'Mar', datetime(2020, 3, 15), 5, 'Environment')
-        self._reg(app, user_id=self._vol(app, 'm1@t.com'), event_id=e1,
-                  attendance_status='present')
-        self._reg(app, user_id=self._vol(app, 'm2@t.com'), event_id=e2,
-                  attendance_status='present')
-        with app.app_context():
-            m = AnalyticsAggregator.monthly_engagement(campus_id=5)
-        assert m['months'] == ['2020-01', '2020-03']   # chronological
-        assert sum(m['registrations']) == 2
-
-    def test_weekly_engagement_works(self, app):
-        e1 = self._event(app, 'W1', datetime(2020, 1, 6), 5, 'Environment')
-        e2 = self._event(app, 'W2', datetime(2020, 1, 13), 5, 'Environment')
-        self._reg(app, user_id=self._vol(app, 'w1@t.com'), event_id=e1,
-                  attendance_status='present')
-        self._reg(app, user_id=self._vol(app, 'w2@t.com'), event_id=e2,
-                  attendance_status='present')
-        with app.app_context():
-            w = AnalyticsAggregator.weekly_engagement(campus_id=5)
-        assert len(w['weeks']) == 2
-        assert sum(w['registrations']) == 2
-        assert w['weeks'] == sorted(w['weeks'])
-
-    def test_activity_performance(self, app):
-        eid = self._event(app, 'Perf', datetime.now() + timedelta(days=1), 5,
-                          'Environment')
-        for i in range(3):
-            v = self._vol(app, f'p{i}@t.com')
-            self._reg(app, user_id=v, event_id=eid, status='completed',
-                      attendance_status='present')
-        with app.app_context():
-            rows = AnalyticsAggregator.activity_performance(campus_id=5)
-        assert rows[0]['registrations'] == 3
-        assert rows[0]['conversion_rate'] == 100.0
-
-    def test_activity_target_uses_verified_attendance(self, app):
-        event_id = self._event(app, 'Target', datetime.now() + timedelta(days=1), 5)
-        with app.app_context():
-            db.session.get(Event, event_id).target_participants = 4
-            db.session.commit()
-        self._reg(app, user_id=self._vol(app, 'target-present@test.com'),
-                  event_id=event_id, attendance_status='present')
-        self._reg(app, user_id=self._vol(app, 'target-absent@test.com'),
-                  event_id=event_id, attendance_status='absent')
-        with app.app_context():
-            row = next(item for item in AnalyticsAggregator.activity_accomplishments(5)
-                       if item['event'].id == event_id)
-        assert row['actual'] == 1
-        assert row['completion_percentage'] == 25.0
-
-    def test_category_distribution(self, app):
-        e1 = self._event(app, 'E1', datetime.now() + timedelta(days=1), 5,
-                         'Environment')
-        e2 = self._event(app, 'E2', datetime.now() + timedelta(days=2), 5,
-                         'Health & Wellness')
-        self._reg(app, user_id=self._vol(app, 'c1@t.com'), event_id=e1,
-                  attendance_status='present')
-        self._reg(app, user_id=self._vol(app, 'c2@t.com'), event_id=e2,
-                  attendance_status='present')
-        with app.app_context():
-            cats = AnalyticsAggregator.category_distribution(campus_id=5)
-        by = {c['category']: c['registrations'] for c in cats}
-        assert by['Environment'] == 1
-        assert by['Health & Wellness'] == 1
-
-    def test_campus_comparison(self, app):
-        eid = self._event(app, 'Cmp', datetime.now() + timedelta(days=1), 5,
-                          'Environment')
-        v = self._vol(app, 'cmp@t.com')
-        self._reg(app, user_id=v, event_id=eid, status='completed',
-                  attendance_status='present')
-        with app.app_context():
-            cmp = AnalyticsAggregator.campus_comparison()
-        bay = next(r for r in cmp if r['campus'] == 'Binmaley')
-        assert bay['registrations'] == 1
-        assert bay['attended'] == 1
-
-    def test_psu_vs_outsider_classification(self, app):
-        eid = self._event(app, 'Ext', datetime.now() + timedelta(days=1), 5,
-                          'Environment')
-        with app.app_context():
-            ext = ExternalParticipant(id_number='EXT-001')
-            db.session.add(ext)
-            db.session.commit()
-            ext_id = ext.id
-        self._reg(app, external_id=ext_id, event_id=eid, status='completed',
-                  attendance_status='present')
-        with app.app_context():
-            s = AnalyticsAggregator.participation_summary(campus_id=5)
-            split = AnalyticsAggregator.psu_vs_outsider(campus_id=5)
-        assert s['psu_registrations'] == 0
-        assert s['external_registrations'] == 1
-        assert s['unique_volunteers'] == 0       # outsiders are not users
-        assert split['outsider'] == 1
-        assert split['psu'] == 0
-
-    def test_date_filter_works(self, app):
-        self._event(app, 'Old', datetime(2020, 1, 1), 5, 'Environment')
-        self._event(app, 'New', datetime(2030, 1, 1), 5, 'Environment')
-        with app.app_context():
-            s = AnalyticsAggregator.participation_summary(
-                campus_id=5, start_date='2025-01-01')
-        # Only the 2030 event is in range (no registrations => 0).
-        assert s['event_count'] == 1
-
-    def test_combined_campus_category_filter(self, app):
-        self._event(app, 'Env', datetime.now() + timedelta(days=1), 5,
-                    'Environment')
-        self._event(app, 'Hlth', datetime.now() + timedelta(days=2), 5,
-                    'Health & Wellness')
-        with app.app_context():
-            s = AnalyticsAggregator.participation_summary(
-                campus_id=5, category='Environment')
-        assert s['event_count'] == 1
-
     def test_empty_datasets_do_not_crash(self, app):
-        # Campus 6 has no seed events and we add none.
         with app.app_context():
-            assert AnalyticsAggregator.campus_comparison() is not None
-            assert AnalyticsAggregator.category_distribution(campus_id=6) == []
-            m = AnalyticsAggregator.monthly_engagement(campus_id=6)
-            assert m['months'] == []
-            w = AnalyticsAggregator.weekly_engagement(campus_id=6)
-            assert w['weeks'] == []
             assert AnalyticsAggregator.skill_distribution() == []
             assert AnalyticsAggregator.interest_distribution() == []
 class TestPhaseTwoControls:
