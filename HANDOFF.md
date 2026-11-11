@@ -1,5 +1,25 @@
 # PSU Volunteer Hub — Continuation Handoff
 
+## Startup connection retry fix: 12 November 2026
+
+User supplied logs showing MySQL connection-refused errors during production
+catalogue validation, followed by successful restarts. Added bounded retries in
+`app/__init__.py`: at most five attempts, two seconds between retries, only for
+MySQL connection errors 2002/2003/2006/2013. Failed sessions are removed and pooled
+connections disposed before retry. Logs contain numeric code/attempt, not driver
+details. Unsupported catalogues, credentials/schema errors, and exhausted retries
+still fail startup; no validation is skipped and no schema/data writes are added.
+
+Verification: 23 production-startup/build checks plus 12 fixed-campus checks
+passed (35 total). Tests cover recovery, exhaustion, non-retryable failures,
+fresh-session validation, log detail exclusion, and real invalid-catalogue rejection.
+User requested committing/pushing this tested fix to both main branches and
+the watched live branch. Publish the same files to all three and verify Railway
+deployment plus public login/home responses. Latest preceding cleanup release:
+`origin/main` `a6d13c6`, `thesis/main` `c79d726`, watched live branch `e5e634c`;
+Railway reported success and public login HTTP 200. Persistent database outages
+still require service repair; retries only absorb brief startup unavailability.
+
 ## Current handoff: 12 November 2026
 
 This section supersedes older local/published-state notes below. Latest task:
