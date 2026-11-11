@@ -5,8 +5,6 @@ Builds aggregate query results used by the director dashboard.
 All methods are static — no state, pure aggregation queries.
 """
 from datetime import datetime, timedelta
-import numpy as np
-from sklearn.linear_model import LinearRegression
 from app.models import db
 from app.models.user import (User, Skill, Interest, user_skills,
                              user_interests)
@@ -626,47 +624,4 @@ class AnalyticsAggregator:
                 Attendance.status == 'present').count()
             data.append({'campus': campus.name, 'value': attended})
         return data
-
-    @staticmethod
-    def forecast_turnout(campus_id=None):
-        """
-        Predict expected attendance rate for upcoming events using linear
-        regression trained on past events' slots vs. actual attendance rate.
-
-        Returns list of {event, predicted_attendance_rate}.
-        """
-        past_query = Event.query.filter(Event.date < datetime.now())
-        if campus_id:
-            past_query = past_query.filter(Event.campus_id == campus_id)
-        past_events = past_query.all()
-        registrations, attendance = AnalyticsAggregator._event_attendance_counts(past_events)
-
-        X_train, y_train = [], []
-        for e in past_events:
-            total_regs = registrations.get(e.id, 0)
-            attended = attendance.get(e.id, 0)
-            if total_regs > 0:
-                X_train.append([e.slots])
-                y_train.append(attended / total_regs)
-
-        # Need at least a handful of past events to fit a meaningful line (Ang Problem natin***)
-        if len(X_train) < 3:
-            return []
-
-        model = LinearRegression().fit(np.array(X_train), np.array(y_train))
-
-        upcoming_query = Event.query.filter(Event.date >= datetime.now())
-        if campus_id:
-            upcoming_query = upcoming_query.filter(
-                Event.campus_id == campus_id)
-
-        results = []
-        for e in upcoming_query.all():
-            predicted = float(model.predict([[e.slots]])[0])
-            predicted = min(max(predicted, 0.0), 1.0)
-            results.append({
-                'event': e,
-                'predicted_attendance_rate': round(predicted, 3),
-            })
-        return results
 

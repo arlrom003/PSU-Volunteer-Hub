@@ -102,16 +102,11 @@ def test_participant_breakdown_uses_one_query(system_app, basis):
     assert len(statements) == 1
 
 
-def test_awards_and_forecast_queries_are_bounded(system_app):
+def test_awards_queries_are_bounded(system_app):
     with system_app.app_context(), query_count(system_app) as statements:
         awards = AnalyticsAggregator.award_leaderboards(REPORT_YEAR)
     assert len(awards['volunteers']) == 5
     assert len(statements) == 5
-    with system_app.app_context(), query_count(system_app) as statements:
-        forecast = AnalyticsAggregator.forecast_turnout(campus_id=1)
-    assert forecast
-    assert all(0 <= row['predicted_attendance_rate'] <= 1 for row in forecast)
-    assert len(statements) == 4
 
 
 @pytest.mark.parametrize('path', ['/static/styles/base.css', '/static/scripts/form-submit-state.js',
@@ -224,13 +219,13 @@ def test_award_counts_keep_year_role_campus_and_completion_rules(app):
     assert AnalyticsAggregator.award_leaderboards(2018) == dict(volunteers=[], campuses=[])
 
 
-def test_forecast_and_attendance_summary_keep_cancelled_denominator(app):
-    person = ExternalParticipant(id_number='performance-forecast-person')
-    other = ExternalParticipant(id_number='performance-forecast-other')
+def test_attendance_summary_keeps_cancelled_denominator(app):
+    person = ExternalParticipant(id_number='performance-summary-person')
+    other = ExternalParticipant(id_number='performance-summary-other')
     db.session.add_all([person, other])
     db.session.flush()
     for index, slots in enumerate([10, 20, 30]):
-        activity = Event(title=f'Forecast past {index}', description='Known counts',
+        activity = Event(title=f'Summary past {index}', description='Known counts',
                          slots=slots, campus_id=5, date=datetime.now() - timedelta(days=index + 2))
         db.session.add(activity)
         db.session.flush()
@@ -242,15 +237,9 @@ def test_forecast_and_attendance_summary_keep_cancelled_denominator(app):
             if number < index:
                 db.session.add(Attendance(registration_id=registration.id,
                     event_id=activity.id, status='present'))
-    future = Event(title='Forecast future', description='Known prediction', slots=20,
-                   campus_id=5, date=datetime.now() + timedelta(days=2))
-    db.session.add(future)
     db.session.commit()
-    forecast = AnalyticsAggregator.forecast_turnout(campus_id=5)
-    assert len(forecast) == 1
-    assert forecast[0]['predicted_attendance_rate'] == pytest.approx(0.5)
     summary = {row['event'].title: row for row in AnalyticsAggregator.attendance_summary(campus_id=5)}
     for index in range(3):
-        assert summary[f'Forecast past {index}']['registered'] == 2
-        assert summary[f'Forecast past {index}']['attended'] == index
-        assert summary[f'Forecast past {index}']['rate'] == index * 50
+        assert summary[f'Summary past {index}']['registered'] == 2
+        assert summary[f'Summary past {index}']['attended'] == index
+        assert summary[f'Summary past {index}']['rate'] == index * 50

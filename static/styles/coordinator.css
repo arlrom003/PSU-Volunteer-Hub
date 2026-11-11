@@ -45,18 +45,6 @@
   .coordinator-briefing { margin-top: 40px; }
 }
 
-.readiness-list {
-  display: grid;
-  gap: 12px;
-}
-
-.readiness-item {
-  padding: 16px;
-  border: 1px solid var(--outline-variant);
-  border-radius: 12px;
-  background: #fff;
-}
-
 .meter {
   height: 8px;
   overflow: hidden;

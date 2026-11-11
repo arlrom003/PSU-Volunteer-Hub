@@ -906,23 +906,6 @@ body:has(.activity-page) .flash--success { background: var(--primary); }
   background: var(--primary);
 }
 
-.readiness-list {
-  display: grid;
-  gap: 16px;
-}
-
-.readiness-item header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
-.readiness-item progress {
-  width: 100%;
-  accent-color: var(--primary);
-}
-
 .rank-list {
   display: grid;
   gap: 0;

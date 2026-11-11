@@ -920,8 +920,6 @@ def analytics():
     # All aggregations scoped to the coordinator's own campus so the page
     # reflects the coordinator's reality, not the whole university.
     campus_name = current_user.campus.name if current_user.campus else 'Campus'
-    forecast_data = AnalyticsAggregator.forecast_turnout(
-        campus_id=campus_id)
     attendance_summary = AnalyticsAggregator.attendance_summary(
         campus_id=campus_id)
     categories = [row[0] for row in db.session.query(Event.category).filter(
@@ -946,7 +944,6 @@ def analytics():
                             **evidence, report_query=report_query,
                             annual_plan=annual_plan,
                             campus_name=campus_name,
-                            forecast_data=forecast_data,
                             attendance_summary=attendance_summary,
                             categories=categories,
                             report_rows=report_rows,

@@ -25,7 +25,7 @@
   >
     <div class="heading-with-tip">
       <h2 id="filter-heading">Filters and Reports</h2>
-      {{ info_tip('Report Filters', 'Activity name, dates, and category scope the KPI strip, comparison charts, engagement trend, and filtered activity report. Forecast and attendance snapshot have their own labelled campus scope.') }}
+      {{ info_tip('Report Filters', 'Activity name, dates, and category scope the KPI strip, comparison charts, engagement trend, and filtered activity report. Attendance snapshot has its own labelled campus scope.') }}
     </div>
     <form class="filter-row" method="get">
       {% if request.args.get('event_id') %}<input type="hidden" name="event_id" value="{{ request.args.get('event_id') }}">{% endif %}
@@ -172,33 +172,9 @@
   {% endset %}
   {% set supporting_evidence %}
   <details class="analytics-disclosure" id="supporting-insights">
-    <summary><span>Supporting Insights</span><small>Forecasts and recent attendance that use their own labelled campus scope.</small></summary>
+    <summary><span>Supporting Insights</span><small>Recent attendance across all report dates and categories.</small></summary>
     <div class="analytics-disclosure__content">
-  <section class="analytics-grid">
-    <article class="panel">
-      <header class="panel__header">
-        <div>
-          <div class="heading-with-tip">
-            <h2>Event Readiness Forecast</h2>
-            {{ info_tip('Event Readiness Forecast', 'Predicted attendance from prior campus event outcomes. The forecast uses campus history independently of the report date and category filters.') }}
-          </div>
-          <small>Campus history; independent of the report filters</small>
-        </div>
-      </header>
-      <div class="readiness-list">
-        {% for item in forecast_data %}
-          {% set pct = (item.predicted_attendance_rate * 100)|round|int %}
-          <article class="readiness-item">
-            <header>
-              <strong>{{ item.event.title }}</strong><span>{{ pct }}%</span>
-            </header>
-            <progress value="{{ pct }}" max="100" aria-label="Predicted Attendance for {{ item.event.title }}">{{ pct }}%</progress>
-          </article>
-        {% else %}
-          <div class="empty-state">Not enough past event data to forecast turnout.</div>
-        {% endfor %}
-      </div>
-    </article>
+  <section>
     <article class="panel">
       <header class="panel__header">
         <div>
