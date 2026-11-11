@@ -188,18 +188,15 @@ body:has(.registration-list) .flash--success { background: var(--primary); }
 }
 
 .profile-recommendations {
+  display: grid;
+  gap: .75rem;
   list-style: none;
   padding: 0;
   margin: 0;
 }
 
 .profile-recommendations li {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: .5rem;
-  padding-block: .5rem;
+  min-width: 0;
 }
 
 .profile-recommendations a {
@@ -207,6 +204,34 @@ body:has(.registration-list) .flash--success { background: var(--primary); }
   align-items: center;
   min-height: 44px;
   overflow-wrap: anywhere;
+}
+
+.profile-recommendations .profile-recommendation-card {
+  display: grid;
+  gap: .5rem;
+  min-height: 72px;
+  padding: 1rem;
+  border: 1px solid #526477;
+  border-radius: var(--radius);
+  color: var(--primary);
+  background: var(--surface);
+  text-decoration: none;
+  touch-action: manipulation;
+}
+
+.profile-recommendation-card span {
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-recommendation-card:hover,
+.profile-recommendation-card:active {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.profile-recommendation-card:hover strong,
+.profile-recommendation-card:focus-visible strong {
+  text-decoration: underline;
 }
 
 .profile-categories {

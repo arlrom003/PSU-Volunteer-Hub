@@ -16,10 +16,6 @@
     <div>
       <h1>Welcome back, {{ current_user.name }}</h1>
       <p>Track your service and discover activities.</p>
-      <div class="panel__actions"><a
-  data-tour-id="profile"
-  href="{{ url_for('volunteer.profile_page') }}"
->Review profile</a><a data-tour-id="help" href="{{ url_for('help_page') }}">Help</a></div>
     </div>
   </header>
   <section class="metric-grid" aria-label="Volunteer summary">
@@ -117,6 +113,7 @@
       <header class="panel__header">
         <h2>Recommended for you</h2>
         <a
+          class="button button--primary"
           data-tour-id="join-activity"
           href="{{ url_for('events.opportunities') }}"
         >View all opportunities</a>

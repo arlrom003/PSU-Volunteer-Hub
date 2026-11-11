@@ -148,8 +148,10 @@
           {% else %}
             {% for rec in recommendations %}
               <li>
-                <a href="{{ url_for('events.opportunities', search=rec.event.title) }}">{{ rec.event.title }}</a>
-                <span>{{ rec.percentage }}% match</span>
+                <a class="profile-recommendation-card" href="{{ url_for('events.opportunity_detail', event_id=rec.event.id) }}">
+                  <strong>{{ rec.event.title }}</strong>
+                  <span>{{ rec.percentage }}% match</span>
+                </a>
               </li>
             {% else %}
               <li>No matching activities are available. Review your preferences or <a href="{{ url_for('events.opportunities') }}">browse opportunities</a>.</li>

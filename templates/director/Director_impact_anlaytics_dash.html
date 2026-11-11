@@ -43,7 +43,6 @@
   {% endif %}
   {{ findings(attention_items, 'director.analytics', live_query, director=true) }}
   {{ performance_metrics(performance, period, deltas, scope_label=live_scope|join(' · ')) }}
-  <p class="analytics-parent-link"><a href="{{ url_for('director.director_dash', **live_query) }}#cross-campus-comparison">Change Filters on the Dashboard</a></p>
   {% if request.args.get('attention') %}<p class="scope-note">Showing: {{ attention_labels[request.args.get('attention')] }}. <a href="{{ url_for('director.analytics', **dict(live_query, attention='')) }}">Show All Activity Records in This Scope</a></p>{% endif %}
   <details class="analytics-disclosure" id="participation-breakdowns">
     <summary><span>Participation Breakdowns</span><small>Campus and category comparisons, participant types, and participation trends.</small></summary>

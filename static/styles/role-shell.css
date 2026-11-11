@@ -1109,8 +1109,6 @@ body:has(.activity-page) .flash--success { background: var(--primary); }
   align-items: center;
 }
 
-.analytics-parent-link { margin: -8px 0 20px; }
-.analytics-parent-link a { color: var(--primary); font-weight: 700; text-underline-offset: 4px; }
 .analytics-scope-summary { margin: 16px 0 0; color: var(--on-surface-variant); line-height: 1.5; overflow-wrap: anywhere; }
 .analytics-filter-summary { margin: 16px 0 0; color: var(--on-surface-variant); line-height: 1.5; overflow-wrap: anywhere; }
 
