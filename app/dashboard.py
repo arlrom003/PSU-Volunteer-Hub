@@ -22,7 +22,12 @@ GUIDANCE_TEXT = {
 
 
 def operational_guidance(rows, scope_label, show_targets=True, allow_scheduling=False):
-    """Use the report's existing predicates; never judge provisional outcomes."""
+    """Turn report findings into follow-up advice with supporting counts.
+
+    Prioritize missing attendance, missed targets, then rates below 75%.
+    Judge rates/targets only after attendance is complete. An empty report
+    suggests scheduling only when caller allows it; advice changes no records.
+    """
     performance = performance_summary(rows, show_targets)
     result = []
     for code, key in [('pending_attendance', 'pending'), ('missed_targets', 'missed'),
@@ -52,11 +57,16 @@ def operational_guidance(rows, scope_label, show_targets=True, allow_scheduling=
 
 
 def scheduling_scope(query):
+    """Allow scheduling advice only without narrow activity/participant filters.
+
+    Zero filtered matches do not prove campus has no scheduled activities.
+    """
     return not any(query.get(key) for key in
                    ('category', 'sex', 'sdg_id', 'activity_name', 'attention', 'event_id', 'department', 'status'))
 
 
 def guidance_scope_label(period, query):
+    """Label advice with report dates and supplied category/name/sex/SDG scope."""
     parts = [period['label']]
     for key, label in [('category', 'Category'), ('activity_name', 'Activity'), ('sex', 'Sex'), ('sdg_id', 'SDG')]:
         if query.get(key):
@@ -65,7 +75,12 @@ def guidance_scope_label(period, query):
 
 
 def present_guidance(records, campus_id, goal_year, query=None):
-    """Generate role-appropriate destinations exclusively from internal routes."""
+    """Attach internal action links to the three highest-priority findings.
+
+    Preserve allowed report filters and force the finding's campus scope.
+    Directors review reports/goals; other callers can reach attendance or
+    activity creation. Return copies so source findings remain reusable.
+    """
     from flask import url_for
     from flask_login import current_user
     director = current_user.role == 'director'
@@ -97,7 +112,13 @@ def present_guidance(records, campus_id, goal_year, query=None):
 
 
 def resolve_period(args, now=None):
-    """Resolve explicit dates before presets; never overwrite bookmarked ranges."""
+    """Resolve reporting dates; explicit start/end parameters override presets.
+
+    Default is this month through today. Compare that preset with the same
+    elapsed days last month, capped at last month's length. Last-month, all,
+    and custom ranges have no automatic comparison. Reject invalid periods,
+    malformed dates, and reversed ranges through shared report validation.
+    """
     from app.reports import parse_date_range, ReportError
     now = now or datetime.now()
     today = now.date()
@@ -127,6 +148,15 @@ def resolve_period(args, now=None):
 
 
 def performance_summary(rows, show_targets=True):
+    """Compute screen totals and final outcomes from existing report rows.
+
+    Activity/registration/present totals include provisional rows. Overall
+    attendance rate uses only complete rows: summed outcome attendance /
+    summed registrations * 100, not an average of event percentages.
+    No eligible registrations means rate None. Positive targets on complete
+    rows can be assessed; hiding targets suppresses their count/missed list.
+    Pending means ended but incomplete; low attendance means strictly <75%.
+    """
     complete = [row for row in rows if row['attendance_complete']]
     registrations = sum(row['registrations'] for row in complete)
     attended = sum(row['outcome_attended'] for row in complete)
@@ -150,7 +180,14 @@ def performance_summary(rows, show_targets=True):
 
 
 def dashboard_evidence(scope, period, now=None):
-    """Reuse report rows for findings, metrics, comparisons and export links."""
+    """Build dashboard evidence from the same filtered rows used by exports.
+
+    Reuse performance rules for findings and charts. Hide whole-event target
+    assessment under a sex filter. When a comparison period exists, subtract
+    previous values from current values; rate deltas are percentage points.
+    Attention-filtered reports skip deltas. Coordinator scheduling advice
+    appears only for an empty, suitably broad campus report.
+    """
     from app.reports import build_events_report
     now = now or datetime.now()
     rows, summary = build_events_report(**scope, start_date=period['start'],
@@ -181,7 +218,12 @@ def dashboard_evidence(scope, period, now=None):
 
 
 def consolidate_attention(performance, pending=None):
-    """Keep one actionable row per activity, retaining every reason for review."""
+    """Merge pending, missed-target, and low-rate findings by event ID.
+
+    Keep every reason on one activity row instead of showing duplicates.
+    An explicit pending list can supply an all-date backlog while other
+    findings retain the selected report period. Copy rows before annotating.
+    """
     items = {}
     groups = [('pending', performance['pending'] if pending is None else pending),
               ('missed', performance['missed']), ('low', performance['low'])]
@@ -208,7 +250,14 @@ def consolidate_attention(performance, pending=None):
 
 
 def summarize_report(rows):
-    """Group existing report counts without querying or changing their meaning."""
+    """Group report rows into campus/category charts and monthly/weekly trends.
+
+    Use event start dates, not signup dates, for time buckets. Keep all present
+    counts separate from complete-attendance outcome counts. Each activity
+    counts once per listed SDG, so SDG totals need not equal activity count;
+    untagged rows retain their 'Not tagged' bucket. No new database queries.
+    Return the ten activities with most registrations for the performance list.
+    """
     campuses, categories, months, weeks, sdgs = {}, {}, {}, {}, {}
     for row in rows:
         for groups, key in (
@@ -228,6 +277,7 @@ def summarize_report(rows):
             sdgs[goal] = sdgs.get(goal, 0) + 1
 
     def comparison(groups):
+        """Sort by registrations, then label; keep final and provisional rates separate."""
         return [
             {'label': label, **counts,
              'final_rate': round(counts['final_attended'] / counts['final_registrations'] * 100, 1)
@@ -239,6 +289,7 @@ def summarize_report(rows):
         ]
 
     def trend(groups):
+        """Sort year-month/ISO-week keys chronologically; leave absent periods unfilled."""
         periods = sorted(groups)
         return {
             'labels': periods,
@@ -258,6 +309,11 @@ def summarize_report(rows):
 
 
 def annual_plan_summary(year=None, campus_id=None):
+    """Load annual goals with screen links in requests, plain summary otherwise.
+
+    Convert invalid annual-year errors to HTTP 400; activity filters do not
+    redefine the approved annual target scope.
+    """
     from app.annual_goals import dashboard_context, summary
     from flask import has_request_context
     try:
@@ -268,5 +324,6 @@ def annual_plan_summary(year=None, campus_id=None):
 
 
 def annual_plan_comparison(year=None):
+    """Reuse annual-goal campus comparisons rather than recalculate achievement here."""
     from app.annual_goals import comparisons
     return comparisons(year)

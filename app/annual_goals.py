@@ -25,6 +25,11 @@ SEX_LABELS = {'female': 'Female', 'male': 'Male', 'prefer_not_to_say': 'Prefer N
 
 
 def number(value):
+    """Parse exact Decimal values for targets/results without float rounding.
+
+    Accept finite values from zero to 1 trillion with at most four decimal
+    places. Reject negatives, NaN, infinity, and malformed input consistently.
+    """
     try:
         result = Decimal(str(value))
         if not result.is_finite() or result < 0 or result > Decimal('1000000000000'):
@@ -37,6 +42,7 @@ def number(value):
 
 
 def selected_year(value=None):
+    """Use current year when omitted; reject reporting years outside 1900-2100."""
     try:
         year = int(value if value is not None else date.today().year)
         if not 1900 <= year <= 2100:
@@ -47,6 +53,12 @@ def selected_year(value=None):
 
 
 def validate_definition(data):
+    """Validate one goal definition before saving or publishing it.
+
+    Require bounded definition/source fields, known plan/rule/evidence values,
+    and an exact non-negative target. Optional deadline must lie in target year.
+    Return cleaned values; target stays text in proposal JSON until publication.
+    """
     values = {}
     for key, limit in [('program', 255), ('code', 80), ('name', 500), ('definition', 4000),
                        ('unit', 80), ('responsible_office', 255), ('source_document', 255)]:
@@ -73,10 +85,16 @@ def validate_definition(data):
 
 
 def cutoff_for(year):
+    """Cap evidence at today or target year's December 31, whichever is earlier."""
     return min(date.today(), date(year, 12, 31))
 
 
 def registrations(year, campus_id=None, event_ids=None):
+    """Load non-cancelled registrations by event date within year-to-cutoff scope.
+
+    Optional campus/event IDs narrow that scope. Eager-load attendance and
+    participant links for evidence readers; this is not a signup-date filter.
+    """
     query = Registration.query.join(Event).filter(
         Registration.status != 'cancelled', Event.date >= datetime(year, 1, 1),
         Event.date < datetime.combine(cutoff_for(year), datetime.max.time()))
@@ -90,6 +108,15 @@ def registrations(year, campus_id=None, event_ids=None):
 
 
 def participation(year, campus_id=None, basis='verified_attendance'):
+    """Count annual PSU/external participation by recorded sex and chosen basis.
+
+    Exclude cancelled registrations; scope by event campus and year-to-cutoff
+    dates. Registrations need no attendance; other bases require present, and
+    completed also requires completed registration. Unique attendees deduplicate
+    PSU IDs and external IDs separately within each sex group.
+    Keep unrecorded in totals but out of leader selection. Equal highest known
+    groups share lead; leader share is highest / total * 100, rounded once.
+    """
     counts = dict.fromkeys(SEX_LABELS, 0)
     recorded_sex = case((Registration.user_id.isnot(None), cast(User.sex, String)),
                         else_=cast(ExternalParticipant.sex, String))
@@ -118,6 +145,19 @@ def participation(year, campus_id=None, basis='verified_attendance'):
 
 
 def target_row(target, year, evidence=None):
+    """Assess one approved target using verified evidence, never missing-as-zero.
+
+    Aggregate basis uses the latest verified snapshot within cutoff, ordered
+    by coverage end then import time/ID; snapshots are not added together.
+    Other bases use mapped ended activities in year/campus scope. At least
+    one ended row and complete attendance on every ended row are required
+    before assessment, including when basis counts activities/registrations.
+
+    Choose actual from activity, signup, present, completed-present, or unique
+    counts; compare with target using >=, <=, or == as configured. Unverified
+    evidence stays pending. Overdue needs an unmet goal and approved deadline
+    strictly before cutoff; incomplete evidence is never an achievement claim.
+    """
     indicator = target.indicator
     actual, verified, source, coverage = None, False, None, None
     mappings = [mapping.event for mapping in target.activity_mappings]
@@ -162,6 +202,13 @@ def target_row(target, year, evidence=None):
 
 
 def summarize(rows, year, campus_id=None, sample=False):
+    """Summarize assessed goals: achieved / all goals * 100.
+
+    Pending goals stay in denominator; no goals means rate None. Rows shared
+    across AOP/ASP count once overall but once in each relevant plan total.
+    Keep verified unmet goals separate from pending; display overdue rows first,
+    then pending, then code. This function assumes caller already merged shares.
+    """
     met = sum(row['met'] for row in rows)
     pending = sum(row['pending'] for row in rows)
     plans = {kind: dict(total=sum(kind in row['plan_types'] for row in rows),
@@ -174,12 +221,24 @@ def summarize(rows, year, campus_id=None, sample=False):
 
 
 def _unique_participants():
+    """Build SQL distinct-person count with separate PSU/external ID spaces.
+
+    External IDs count only when user_id is NULL, preventing a dual-linked
+    registration from counting twice. Same numeric ID across tables is distinct.
+    """
     return (func.count(func.distinct(Registration.user_id)) +
             func.count(func.distinct(case((Registration.user_id.is_(None),
                                            Registration.external_participant_id)))))
 
 
 def _activity_evidence(targets, year):
+    """Batch mapped-event reports and unique-person totals for several targets.
+
+    Load each mapped event once with shared reporting rules, through cutoff.
+    Count distinct present non-cancelled participants per unique-attendee target,
+    restricted to ended events and target campus. Return event-ID and target-ID
+    maps so target_row avoids repeating queries for each approved goal.
+    """
     from app.reports import build_events_report
     event_ids = {mapping.event_id for target in targets
                  if target.indicator.evidence_basis != 'approved_aggregate'
@@ -206,6 +265,11 @@ def _activity_evidence(targets, year):
 
 
 def _summaries(year, campus_ids):
+    """Load active targets under approved plans for requested year/scopes.
+
+    None represents university-wide targets, not a sum of campus targets.
+    Eager-load definitions/results/mappings, batch evidence, then split by campus.
+    """
     targets = AnnualTarget.query.join(AnnualIndicator).join(AnnualPlan).filter(
         AnnualPlan.year == year, AnnualPlan.status == 'approved', AnnualTarget.is_active.is_(True),
         AnnualTarget.campus_id.in_([campus for campus in campus_ids if campus is not None]) |
@@ -224,6 +288,12 @@ def _summaries(year, campus_ids):
 
 
 def _target_summary(targets, year, campus_id, activity_evidence):
+    """Merge matching shared AOP/ASP definitions into one overall goal row.
+
+    Prefer verified evidence and retain every plan label. Conflicting target
+    definitions or verified actual values force pending status instead of a
+    misleading achievement. Unshared targets remain separate by target ID.
+    """
     groups = defaultdict(list)
     for target in targets:
         groups[target.indicator.shared_key or f'target:{target.id}'].append(target)
@@ -243,6 +313,11 @@ def _target_summary(targets, year, campus_id, activity_evidence):
 
 
 def summary(year=None, campus_id=None, sample=False):
+    """Return one scope's annual results, or explicitly marked sample rows.
+
+    Director/admin requests reuse request-cached university/campus batches;
+    other callers load only requested scope. Caller must enforce authorization.
+    """
     year = selected_year(year)
     if sample:
         return summarize(sample_rows(campus_id), year, campus_id, True)
@@ -252,18 +327,29 @@ def summary(year=None, campus_id=None, sample=False):
 
 
 def _university_summaries(year):
+    """Cache university targets and all official campus summaries per request/year.
+
+    Request-local reuse avoids repeated evidence queries; no cross-user cache.
+    """
     def load():
+        """Fetch all official campus IDs plus None for separate university targets."""
         ids = [campus.id for campus in _campuses()]
         return _summaries(year, [None, *ids])
     return request_value(('annual-summaries', year), load)
 
 
 def _campuses():
+    """Use the official campus catalogue for comparison scope and ordering."""
     from app.campuses import campus_rows
     return campus_rows()
 
 
 def sample_rows(campus_id):
+    """Build deterministic, labelled preview examples without database writes.
+
+    Campus-ID variations exercise empty, pending, shared, and achieved states.
+    These figures are illustrative, never approved institutional evidence.
+    """
     if campus_id is not None and campus_id % 4 == 0:
         return []
     rows = []
@@ -288,6 +374,11 @@ def sample_rows(campus_id):
 
 
 def comparisons(year=None, sample=False):
+    """Return one goal summary per official campus, including campuses with no goals.
+
+    Reuse batched evidence for real results; previews use labelled sample rows.
+    University-wide targets remain outside these campus comparison totals.
+    """
     year = selected_year(year)
     campuses = _campuses()
     plans = ({campus.id: summarize(sample_rows(campus.id), year, campus.id, True) for campus in campuses}
@@ -296,7 +387,13 @@ def comparisons(year=None, sample=False):
 
 
 def campus_ranking(campuses, lowest=False):
-    """Rank the existing summaries by exact achievement ratios, retaining ties."""
+    """Rank campuses by exact achieved/total ratio, not rounded display percent.
+
+    Exclude campuses with no approved goals. Fraction preserves true ties;
+    name/ID stabilize order without breaking equal leaders. lowest=True selects
+    lowest ratio for follow-up. Best-mode all-zero results have no winner;
+    lowest mode still identifies zero-achievement leaders for follow-up.
+    """
     rows = sorted((campus for campus in campuses if campus['total'] > 0),
                   key=lambda campus: ((1 if lowest else -1) * Fraction(campus['met'], campus['total']),
                                       campus['campus'].casefold(), campus['campus_id']))
@@ -308,7 +405,12 @@ def campus_ranking(campuses, lowest=False):
 
 
 def goal_guidance(plan):
-    """Remaining goals are not overdue unless an approved deadline says so."""
+    """Suggest proposal/evidence follow-up, independently of activity filters.
+
+    Samples show no official advice. No approved goals prompts proposal review;
+    unmet/pending goals prompt evidence review. Remaining is not automatically
+    overdue; target_row uses approved deadlines for that separate judgement.
+    """
     if plan.get('sample'):
         return []
     if not plan['total']:
@@ -323,6 +425,14 @@ def goal_guidance(plan):
 
 
 def dashboard_context(year=None, campus_id=None):
+    """Attach annual-goal screen links, rankings, and proposal counts to summary.
+
+    goal_year overrides the supplied year; sample selects read-only examples.
+    University context keeps university targets separate from campus rollup.
+    Director dashboard highlights lowest campus achievement; other contexts
+    use highest ranking. Campus context adds participation and follow-up advice.
+    Activity report dates/categories do not redefine this annual evidence scope.
+    """
     from flask import request, url_for
     year = selected_year(request.args.get('goal_year', year))
     sample = request.args.get('sample') == '1'

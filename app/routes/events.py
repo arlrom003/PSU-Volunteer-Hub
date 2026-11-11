@@ -34,13 +34,20 @@ EXTERNAL_LINK_MAX_AGE = 60 * 60 * 24 * 30
 
 
 def _listing_query():
-    """Carry only existing listing filters, never a caller-supplied return URL."""
+    """Preserve allowed multi-value listing filters in internal return links.
+
+    Never copy a caller-supplied return URL; navigation stays on app routes.
+    """
     return {key: request.args.getlist(key)
             for key in ('page', 'search', 'category', 'campus', 'campus_mode')
             if key in request.args}
 
 
 def _registration_query():
+    """Keep allowed history/calendar parameters when returning from cancellation.
+
+    getlist preserves repeated values; arbitrary URL parameters are discarded.
+    """
     return {key: request.args.getlist(key)
             for key in ('status', 'campus', 'category', 'start_date', 'end_date',
                         'show', 'page', 'calendar_year', 'calendar_month')
@@ -48,6 +55,13 @@ def _registration_query():
 
 
 def _cancellation_state(registration, now=None):
+    """Explain whether this PSU signup can request coordinator cancellation review.
+
+    Existing request history takes priority, even after rejection or rejoining;
+    one request per registration. Otherwise require pending/confirmed status,
+    no attendance record, and time strictly before deadline (or event start).
+    Return display state only; requesting cancellation does not free a slot.
+    """
     deadline = registration.event.cancellation_deadline or registration.event.date
     cancellation = registration.cancellation_request
     if cancellation:
@@ -76,6 +90,11 @@ def _cancellation_state(registration, now=None):
 
 
 def _opportunity_state(event, registration=None, now=None, registration_status=None):
+    """Choose opportunity label: existing signup, started, full, or available.
+
+    Any supplied non-cancelled status shows registered before date/capacity
+    checks. Display status is not authorization; join route rechecks on POST.
+    """
     remaining = event.slots_remaining()
     if registration is not None:
         registration_status = registration.status or 'pending'
@@ -91,6 +110,10 @@ def _opportunity_state(event, registration=None, now=None, registration_status=N
 
 
 def _agreement_for(event):
+    """Choose event-specific consent text, latest active policy, or default text.
+
+    Return version alongside body so registration can record accepted wording.
+    """
     if event.participation_agreement_text:
         return {'title': 'Event Participation Agreement',
                 'body': event.participation_agreement_text,
@@ -107,12 +130,22 @@ def _agreement_for(event):
 
 
 def _external_token(registration):
+    """Sign registration ID for guest management with external-registration salt.
+
+    Signature detects tampering; payload is not encrypted. Possession grants
+    access to that registration without a PSU account, so treat link as private.
+    """
     serializer = URLSafeTimedSerializer(
         current_app.config['SECRET_KEY'], salt='external-registration')
     return serializer.dumps({'registration_id': registration.id})
 
 
 def _external_registration_from_token(token):
+    """Verify guest link signature/30-day age, then require an external signup.
+
+    Invalid, expired, deleted, or non-external registration links are rejected;
+    caller converts signature errors to unavailable-page response.
+    """
     serializer = URLSafeTimedSerializer(
         current_app.config['SECRET_KEY'], salt='external-registration')
     payload = serializer.loads(token, max_age=EXTERNAL_LINK_MAX_AGE)
@@ -124,6 +157,11 @@ def _external_registration_from_token(token):
 
 
 def _external_cancellation_available(registration):
+    """Allow guest requests only before deadline, with no attendance/pending request.
+
+    Require pending/confirmed signup. This predicate blocks pending requests;
+    unlike PSU display state, it does not reject all reviewed request history.
+    """
     event = registration.event
     return (
         registration.status in ('pending', 'confirmed')
@@ -136,7 +174,13 @@ def _external_cancellation_available(registration):
 
 def _upsert_external_participant(id_number, campus_id, name=None, contact_number=None,
                                  address=None, email=None, sex=None):
-    """Find an existing outsider by ID number or create a new record."""
+    """Find guest by ID number under row lock, or create one without committing.
+
+    Reuse existing guest only if prior registrations belong exclusively to
+    requesting campus, preventing cross-campus personal-data changes. Fill
+    missing optional fields only; never overwrite existing values or clear
+    them with blanks. Flush assigns ID; caller creates signup and commits.
+    """
     id_number = (id_number or '').strip()
     participant = ExternalParticipant.query.filter_by(
         id_number=id_number).with_for_update().first()
@@ -169,6 +213,14 @@ def _upsert_external_participant(id_number, campus_id, name=None, contact_number
 
 @events_bp.route('/opportunities')
 def opportunities():
+    """List upcoming positive-capacity activities, nine per page, soonest first.
+
+    Validate official campus include/exclude choices; invalid scope returns
+    no rows and HTTP 400. Exclude mode retains unassigned-campus activities.
+    Apply category/title/description search; full activities can still appear
+    with their full label. Fetch counts and viewer signup state in SQL to avoid
+    per-card queries. Listing filters do not authorize registration writes.
+    """
     page = request.args.get('page', 1, type=int)
     per_page = 9
     campuses = campus_query().order_by(func.lower(Campus.name), Campus.name, Campus.id).all()
@@ -213,8 +265,7 @@ def opportunities():
     pagination = query.paginate(page=page, per_page=per_page, error_out=False, count=False)
     pagination.total = filtered_count
     events = pagination.items
-    # Data-driven category filter: distinct categories actually in use,
-    # so the dropdown never offers options that return zero results.
+    # Categories come from all stored events, independently of current filters.
     categories = [row[0] for row in db.session.query(
         Event.category).distinct().order_by(Event.category).all() if row[0]]
     registered_event_ids = {event.id for event in events
@@ -243,6 +294,10 @@ def opportunities():
 
 @events_bp.route('/opportunities/<int:event_id>')
 def opportunity_detail(event_id):
+    """Show one activity with capacity and signed-in volunteer's signup state.
+
+    Public read access; authenticated registration remains a separate route.
+    """
     event = capacity_query(Event.query).options(joinedload(Event.campus)).filter_by(id=event_id).first()
     if event is None:
         abort(404)
@@ -260,6 +315,17 @@ def opportunity_detail(event_id):
 @login_required
 @role_required('volunteer')
 def register_for_event(event_id):
+    """Show consent on GET; confirm volunteer signup on validated POST.
+
+    Lock event and existing signup on POST before date/slot checks. Occupied
+    slots count confirmed/completed registrations; pending rows do not consume
+    this count. Refuse started events and non-cancelled duplicates. A cancelled
+    row can be restored instead of inserting a second signup.
+
+    Require participation consent plus NDA consent when configured; store UTC
+    acceptance times and exact policy versions. Queue audit, empty-profile
+    bootstrap, and campus notifications with signup, then commit together.
+    """
     event = (Event.query.filter_by(id=event_id).with_for_update().first() if request.method == 'POST'
              else capacity_query(Event.query).options(joinedload(Event.campus)).filter_by(id=event_id).first())
     if event is None:
@@ -335,7 +401,13 @@ def register_for_event(event_id):
 @login_required
 @role_required('volunteer')
 def cancel_registration(registration_id):
-    """Request review of a future signup cancellation; never cancel directly."""
+    """Submit one owned PSU signup's cancellation for coordinator review.
+
+    Enforce cancellation state/deadline and selected reason; Other needs detail.
+    Save request, audit, and campus notification together. Keep signup active
+    until coordinator approval. If simultaneous requests hit unique constraint,
+    roll back and show existing request rather than create another.
+    """
     registration = db.session.get(Registration, registration_id)
     if registration is None:
         abort(404)
@@ -389,6 +461,14 @@ def cancel_registration(registration_id):
 @login_required
 @role_required('volunteer')
 def volunteer_dash():
+    """Assemble volunteer's suggestions, signup history, and future calendar.
+
+    Suggestions use upcoming candidates and save logs at final page commit.
+    History filters/pagination affect history only, not summary or calendar.
+    Summary total counts all signup statuses; Active/New label is not earned
+    certification. Calendar shows future confirmed signups for selected month.
+    Cancellation states explain review availability without changing signups.
+    """
     profile = current_user.profile
     candidates = Event.query.filter(Event.date >= datetime.now()).options(
         load_only(Event.id, Event.date, Event.category), selectinload(Event.required_skills_rel)
@@ -484,6 +564,7 @@ def volunteer_dash():
 
 
 def _dismiss_first_use_guide():
+    """Save authenticated user's UTC guide-dismissal time, then JSON or role redirect."""
     current_user.first_use_guide_dismissed_at = datetime.utcnow()
     db.session.commit()
     if request.accept_mimetypes.best == 'application/json':
@@ -514,7 +595,7 @@ def dismiss_volunteer_first_use_guide():
 
 @events_bp.route('/event/<int:event_id>/join', methods=['GET', 'POST'])
 def event_join(event_id):
-    """Redirect retired public join links to the PSU sign-in flow."""
+    """Redirect retired public join links to sign-in, never create a signup here."""
     event = db.session.get(Event, event_id)
     if event is None:
         abort(404)
@@ -524,7 +605,11 @@ def event_join(event_id):
 
 @events_bp.route('/external/registrations/<token>')
 def external_registration_manage(token):
-    """Show a guest only the registration represented by their signed link."""
+    """Show only guest registration authorized by valid signed management link.
+
+    Invalid/expired links share HTTP 404 response. Compute cancellation
+    availability without changing attendance, signup, or request records.
+    """
     try:
         registration = _external_registration_from_token(token)
     except (BadSignature, SignatureExpired):
@@ -540,7 +625,12 @@ def external_registration_manage(token):
 
 @events_bp.route('/external/registrations/<token>/cancel', methods=['POST'])
 def external_registration_cancel(token):
-    """Accept a signed guest cancellation request for coordinator review."""
+    """Create guest cancellation request after token, state, and reason checks.
+
+    Keep signup active; coordinator approval performs cancellation. Save request
+    and audit before notifying campus coordinators. Notification save is a
+    separate commit, so request can remain saved if later notification fails.
+    """
     try:
         registration = _external_registration_from_token(token)
     except (BadSignature, SignatureExpired):

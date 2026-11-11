@@ -21,9 +21,8 @@ from app.models.user import User, Skill, Interest
 from app.models import db
 
 
-# Curated synonym/abbreviation map so variant spellings of taxonomy terms
-# collapse to a single canonical token. Applied identically to both user and
-# event terms so matches are preserved (or improved) rather than lost.
+# Shared lookup for volunteer and event terms: known short forms match full names.
+# Only listed aliases change; this is not fuzzy matching or language understanding.
 SYNONYM_MAP = {
     'cs': 'computer skills',
     'ict': 'it/computer skills',
@@ -43,7 +42,12 @@ SYNONYM_MAP = {
 
 
 def _normalize_token(term):
-    """Lowercase, trim, strip trailing punctuation, and apply synonyms."""
+    """Clean one term so spelling format does not block matching.
+
+    Trim edges, lowercase, remove trailing periods/commas/semicolons, and
+    collapse repeated spaces. Replace known aliases through SYNONYM_MAP.
+    Return None for empty input; keep unknown terms as cleaned text.
+    """
     if not term:
         return None
     token = term.strip().lower()
@@ -55,7 +59,11 @@ def _normalize_token(term):
 
 
 def normalize_terms(raw_terms):
-    """Return a canonicalized set of taxonomy terms (deduplicated)."""
+    """Clean each supplied term, discard blanks, and remove duplicates.
+
+    Return a set: choosing the same term twice gives no extra score.
+    Expect a collection of whole terms, not a single comma-separated string.
+    """
     result = set()
     if not raw_terms:
         return result
@@ -67,7 +75,14 @@ def normalize_terms(raw_terms):
 
 
 def _cosine_similarity(user_terms: set, event_terms: set) -> float:
-    """Return cosine similarity for two binary term vectors."""
+    """Measure shared terms using binary cosine similarity, from 0 to 1.
+
+    Clean both sets. Build one shared vocabulary; mark each term 1 when
+    present, 0 when absent. scikit-learn compares those two vectors.
+    Formula: shared_term_count / sqrt(user_term_count * event_term_count).
+    Example: {teaching, health} versus {teaching} gives about 0.7071.
+    Empty side gives 0. No trained model, TF-IDF, or word-frequency weighting.
+    """
     user_terms = normalize_terms(user_terms)
     event_terms = normalize_terms(event_terms)
     if not user_terms or not event_terms:
@@ -79,17 +94,25 @@ def _cosine_similarity(user_terms: set, event_terms: set) -> float:
 
 
 def get_recommendations(volunteer_profile, events=None, top_n=5, campus_id=None, commit=True):
-    """
-    Score events for a volunteer using cosine similarity over
-    combined skill + interest/category terms.
+    """Rank activity fit from profile terms and registration history.
 
-    Parameters:
-      volunteer_profile : VolunteerProfile (or None for cold-start)
-      events            : optional pre-filtered list of Event rows
-      top_n             : number of recommendations to return
-      campus_id         : campus used by the cold-start fallback
+    Combine profile skills/interests into one set. Compare against each
+    event's required skills plus category, then add 0.15 for a previously
+    joined category, capped at 1. Cancelled/rejected history gives no boost.
+    Joining a category needs a registration, not verified attendance.
 
-    Returns list of dicts: [{event, score, matched_skills, matched_interests, percentage}]
+    Exclude events already registered for, except cancelled/rejected entries.
+    With events=None, query upcoming events across campuses. Supplied events
+    keep caller's date, campus, and eligibility scope; only registration
+    exclusion happens here. No capacity or positive-score cutoff applies.
+    Missing profile, empty selections, or missing user uses fallback instead.
+
+    Return at most top_n rows with event, score (4 decimal places), matching
+    profile skill/interest sets, and percentage. Percentage is rounded score
+    * 100, not attendance probability. Equal scores keep candidate order.
+    Save top results through _log_recommendations; commit=False leaves
+    transaction control to caller. Fallback returns without saving logs.
+    campus_id affects only fallback's own query, not personalized scoring.
     """
     if volunteer_profile is None or (not volunteer_profile.skill_list and not volunteer_profile.interest_list):
         return _cold_start_recommendations(events, top_n, campus_id=campus_id)
@@ -107,8 +130,7 @@ def get_recommendations(volunteer_profile, events=None, top_n=5, campus_id=None,
     registered_ids = {event_id for event_id, status, _ in history
                       if status not in ('cancelled', 'rejected')}
 
-    # Participation history: categories the volunteer has actually joined weigh
-    # toward future events of the same category (cold-start-safe: empty if none).
+    # Registration history supplies category preference; attendance is not required.
     history_categories = set()
     for _, status, category in history:
         if status in ('cancelled', 'rejected'):
@@ -133,13 +155,13 @@ def get_recommendations(volunteer_profile, events=None, top_n=5, campus_id=None,
             event_terms |= normalize_terms([event.category])
 
         terms_key = frozenset(event_terms)
+        # Same term set means same base score; reuse within this request.
         if terms_key not in similarities:
             similarities[terms_key] = _cosine_similarity(user_terms, event_terms)
         score = similarities[terms_key]
         matched = user_terms & event_terms
 
-        # Participation-history weighting: a small, capped boost when this event's
-        # category matches a category the volunteer has previously joined.
+        # Fixed bonus applies once per matching category, regardless of join count.
         if event.category and (normalize_terms([event.category]) & history_categories):
             score = min(1.0, score + 0.15)
 
@@ -161,10 +183,16 @@ def get_recommendations(volunteer_profile, events=None, top_n=5, campus_id=None,
 
 
 def _cold_start_recommendations(events=None, limit=5, campus_id=None):
-    """
-    Fallback when no profile, skills, or interests exist.
-    Ranks upcoming events by popularity (registration count), preferring
-    the volunteer's campus, with soonest events breaking ties.
+    """Suggest popular activities when profile cannot produce a personal match.
+
+    With events=None, query upcoming events and restrict to campus_id when
+    supplied. With a supplied list, trust caller's scope; no extra campus,
+    date, capacity, or existing-registration filter applies here.
+    Count every registration, including cancelled/rejected rows. More
+    registrations rank first; earlier event dates break popularity ties.
+    Return at most limit events with score/percentage 0 and empty match sets.
+    Zero means no personal score calculated, not proof of unsuitable activity.
+    Fallback does not write RecommendationLog records.
     """
     if events is None:
         query = Event.query.filter(Event.date >= datetime.now())
@@ -196,10 +224,14 @@ def _cold_start_recommendations(events=None, limit=5, campus_id=None):
 
 
 def bootstrap_from_event(user, event, top_skills=3, commit=True):
-    """
-    Seed a cold-start volunteer's skills/interests from their first
-    registered event, so future recommendations become personalized.
-    No-op once the user already has any skills or interests.
+    """Fill an empty profile from a registered event for future matching.
+
+    Stop if user already has any skills or interests. Otherwise copy up to
+    top_skills required-skill entries (default 3) in relationship order and
+    use event category as an interest. Reuse matching taxonomy records or
+    create missing ones. These inferred choices do not verify proficiency.
+    commit=True saves changes; False lets registration caller save everything
+    in one transaction. This function checks empty selections, not join count.
     """
     if user.skills or user.interests:
         return
@@ -220,7 +252,13 @@ def bootstrap_from_event(user, event, top_skills=3, commit=True):
 
 
 def _log_recommendations(user, recommendations, commit=True):
-    """Persist recommendation results for analysis."""
+    """Save one RecommendationLog row per returned personalized suggestion.
+
+    Bulk-insert user ID, event ID, and final score, including history bonus.
+    Repeated calls can add new rows for the same user/event; no deduplication.
+    commit=True commits the current session, including other pending changes;
+    False leaves saving or rollback to caller. Empty input inserts no rows.
+    """
     if recommendations:
         db.session.execute(insert(RecommendationLog), [dict(user_id=user.id,
             event_id=rec['event'].id, similarity_score=rec['score']) for rec in recommendations])

@@ -24,6 +24,7 @@ class ReportError(ValueError):
 
 
 def _date_range_label(start_date, end_date):
+    """Describe supplied date bounds for exports; this label does not filter rows."""
     start = (start_date or '').strip()
     end = (end_date or '').strip()
     if start and end:
@@ -36,11 +37,11 @@ def _date_range_label(start_date, end_date):
 
 
 def parse_date_range(start_date, end_date):
-    """Return (start, end) datetimes or None for empty values.
+    """Parse YYYY-MM-DD bounds to midnight datetimes; blanks become None.
 
-    The end boundary is made inclusive of the whole end day so a report for
-    "2025-08-31" includes events on that date. Raises ReportError on malformed
-    input or when start_date is after end_date.
+    Reject malformed dates and start after end. Return end at midnight;
+    build_events_report adds one day and uses a strict upper bound so the
+    selected end date includes its whole day.
     """
     start = None
     end = None
@@ -79,6 +80,7 @@ def resolve_campus(campus_id, allow_all=True):
 
 
 def report_invalid():
+    """Raise the shared campus error used by strict scope validation."""
     raise ReportError('invalid campus_id')
 
 
@@ -86,12 +88,25 @@ def build_events_report(campus_id=None, start_date=None, end_date=None,
                         category=None, sex=None, sdg_id=None, activity_name=None,
                         campus_ids=None, attention=None, now=None, event_id=None, event_ids=None,
                         include_sdgs=True, limit=None, offset=0, include_summary=True):
-    """Return (rows, summary) for the filtered event dataset.
+    """Return shared activity rows/totals for screens, CSV, and PDF.
 
-    campus_id=None means all campuses. Coordinators must pass their own
-    campus id; this function never derives a scope from the request.
-    campus_ids adds an intersecting allow-list: None is unrestricted, [] is
-    empty, and a None entry includes activities without an assigned campus.
+    Caller owns authorization: campus_id=None allows all campuses. campus_ids
+    intersects that scope; None means unrestricted, [] means empty, and a
+    None member permits unassigned activities. Dates filter event start dates
+    with both selected days included. Title search treats %/_ literally.
+
+    Registrations exclude only cancelled status. Present attendance counts
+    can differ from non-cancelled registration-linked outcome counts.
+    Sex filters use User records here, so exclude external participants.
+    Missing/unconfirmed counts check the whole activity, even under sex scope.
+
+    Complete means activity ended, no eligible signup lacks attendance, and
+    every present eligible signup is completed. Only complete rows support
+    low-rate/missed-target findings. Target percentages also require a positive
+    target and no sex filter; unknown/provisional percentages stay None.
+
+    limit/offset page detail rows; with include_summary=True, totals still
+    cover all matching activities. Ordering is latest event date, then ID.
     """
     from app.dashboard import ATTENTION_LABELS
     start, end = parse_date_range(start_date, end_date)
@@ -139,8 +154,10 @@ def build_events_report(campus_id=None, start_date=None, end_date=None,
     attendance_eligible = eligible | Registration.status.is_(None)
 
     def count_when(condition):
+        """COUNT ignores NULL CASE results, counting only matching rows."""
         return func.count(case((condition, 1)))
 
+    # Aggregate each source before joining Event, avoiding multiplied counts.
     registration_counts = db.session.query(
             Registration.event_id,
             count_when(valid).label('registrations'),
@@ -166,6 +183,7 @@ def build_events_report(campus_id=None, start_date=None, end_date=None,
         attendance_counts, attendance_counts.c.event_id == Event.id)
     sql_ended = func.coalesce(Event.end_date, Event.date) <= now
     sql_complete = sql_ended & (columns[5] == 0) & (columns[6] == 0)
+    # Apply finding filters in SQL before pagination; .75 is a review guide.
     if attention == 'pending_attendance':
         data_query = data_query.filter(sql_ended & ~sql_complete)
     elif attention == 'low_attendance':
@@ -181,6 +199,7 @@ def build_events_report(campus_id=None, start_date=None, end_date=None,
     if include_sdgs:
         events_query = events_query.options(selectinload(Event.sdgs).load_only(SdgGoal.number))
     if limit is not None:
+        # One extra first-page row reveals whether a separate full-scope sum is needed.
         events_query = events_query.offset(max(0, offset)).limit(limit + (1 if include_summary and not offset else 0))
     events = events_query.all()
     complete_scope = limit is None or (not offset and len(events) <= limit)
@@ -261,9 +280,15 @@ def build_events_report(campus_id=None, start_date=None, end_date=None,
 
 
 def batched_events_report(**scope):
-    """Return a full-scope summary and an iterator that fetches 1,000 detail rows at a time."""
+    """Return full-scope totals plus detail iterator in 1,000-row query batches.
+
+    Fetch the first batch/totals now; later batches load when consumed.
+    Keep identical filters and ordering, without repeating summary queries.
+    This bounds database fetch size; renderers may still buffer final output.
+    """
     batch, summary = build_events_report(**scope, limit=1000)
     def records():
+        """Yield batches until the first query's full event count is reached."""
         current, offset = batch, 0
         while current:
             yield from current
@@ -276,6 +301,7 @@ def batched_events_report(**scope):
 
 def _build_meta(title, scope, start_date, end_date, category,
                 role_label=None, historical_note=None):
+    """Build export labels/timestamp; callers must already enforce data scope."""
     return {
         'title': title,
         'scope': scope,
@@ -288,12 +314,22 @@ def _build_meta(title, scope, start_date, end_date, category,
 
 
 def csv_safe(value):
+    """Prefix risky string starts with apostrophe to prevent spreadsheet formulas.
+
+    Protect =, +, -, @ and leading tab/newline characters; keep numeric values
+    numeric. CSV quoting alone does not stop spreadsheet formula execution.
+    """
     if isinstance(value, str) and value[:1] in ('=', '+', '-', '@', '\t', '\r', '\n'):
         return "'" + value
     return value
 
 
 def render_csv(rows, summary, meta):
+    """Format supplied report rows and totals without recomputing analytics.
+
+    Include scope labels and escape formula-like text fields. Blank target
+    progress means no verified assessment, not zero achievement.
+    """
     import csv
     import io
 
@@ -327,6 +363,11 @@ def render_csv(rows, summary, meta):
 
 
 def render_pdf(rows, summary, meta):
+    """Format the same report data as landscape A4 PDF bytes.
+
+    Escape text inserted into Paragraph markup, repeat table headings across
+    pages, and print caller-supplied totals. Do not query or change filters.
+    """
     import io
     from xml.sax.saxutils import escape
 
