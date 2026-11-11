@@ -26,6 +26,7 @@ goals_bp = Blueprint('goals', __name__, url_prefix='/annual-goals')
 
 @goals_bp.app_template_filter('goal_number')
 def goal_number(value):
+    """Format validated goal numbers without trailing decimal zeros; preserve unknowns."""
     if value is None:
         return 'Not available'
     text = format(number(value), 'f')
@@ -33,10 +34,16 @@ def goal_number(value):
 
 
 def director():
+    """Check exact director role; read-capable admins are not goal publishers here."""
     return current_user.role == 'director'
 
 
 def campus_scope():
+    """Resolve reader scope without accepting a coordinator's requested campus.
+
+    Director/admin may choose an existing campus or separate university targets.
+    Coordinators always use assigned campus; missing assignment returns 403.
+    """
     if current_user.role in ('director', 'admin'):
         value = request.args.get('campus', '')
         if not value:
@@ -54,11 +61,17 @@ def campus_scope():
 
 
 def reject_sample_write():
+    """Reject sample=1 on query/form so preview data cannot become official writes."""
     if request.args.get('sample') == '1' or request.form.get('sample') == '1':
         abort(400, description='Sample previews are read-only. Exit the preview to manage official goals.')
 
 
 def owned_proposal(proposal_id, lock=False):
+    """Load proposal or 404; restrict non-directors to their assigned campus.
+
+    Mutation callers request a row lock to serialize edits and review decisions
+    on databases supporting FOR UPDATE. Route decorators enforce allowed roles.
+    """
     statement = select(AnnualGoalProposal).where(AnnualGoalProposal.id == proposal_id)
     if lock:
         statement = statement.with_for_update()
@@ -71,6 +84,10 @@ def owned_proposal(proposal_id, lock=False):
 
 
 def history(proposal, action, note=None):
+    """Append actor, UTC time, note, and payload snapshot to proposal audit history.
+
+    Replace JSON list so ORM tracks the update; caller owns commit/rollback.
+    """
     proposal.history = [*(proposal.history or []), dict(action=action, actor=current_user.id,
                        at=datetime.utcnow().isoformat(), note=note, payload=dict(proposal.payload))]
 
@@ -79,6 +96,13 @@ def history(proposal, action, note=None):
 @login_required
 @roles_required('coordinator', 'director', 'admin')
 def details():
+    """Show approved goal results with scoped filters and ten rows per page.
+
+    Export all filtered rows before pagination. Block official exports of sample
+    figures. Participation basis affects demographic counts, not target evidence.
+    Campus comparison cards recalculate plan/program/office selections separately;
+    status filtering applies to main detail rows.
+    """
     try:
         year = selected_year(request.args.get('year'))
     except ReportError as exc:
@@ -113,7 +137,7 @@ def details():
     query.pop('page', None)
     university_reader = current_user.role in ('director', 'admin')
     campus_rows = comparisons(year, sample) if university_reader else []
-    # Apply the same plan/program/office/status filters to each campus drilldown.
+    # Campus cards apply plan/program/office filters; main rows also apply status.
     from app.annual_goals import summarize
     for campus in campus_rows:
         selected = [row for row in campus['rows']
@@ -131,6 +155,11 @@ def details():
 
 
 def export_rows(rows, plan, filters, kind):
+    """Format supplied goal evidence as CSV/PDF with source, coverage, and scope.
+
+    Export caller's full filtered set, not page slice. Protect spreadsheet text
+    with csv_safe and escape PDF Paragraph text; reject unsupported formats.
+    """
     if kind not in ('csv', 'pdf'):
         abort(400)
     columns = ['Code', 'Indicator', 'Plans', 'Program', 'Actual', 'Target', 'Unit', 'Rule', 'Office', 'Status', 'Source', 'Coverage']
@@ -167,6 +196,11 @@ def export_rows(rows, plan, filters, kind):
 @login_required
 @roles_required('coordinator', 'director')
 def workspace():
+    """List coordinator's campus proposals or director's reviewable/university work.
+
+    Coordinators cannot inspect other campuses. Directors see submitted,
+    returned, approved campus proposals plus university drafts; newest first.
+    """
     query = AnnualGoalProposal.query
     if not director():
         if current_user.campus_id is None:
@@ -183,6 +217,14 @@ def workspace():
 @login_required
 @roles_required('coordinator', 'director')
 def edit(proposal_id=None):
+    """Create/edit drafts and returned proposals, then save, submit, or publish.
+
+    Coordinators work only on their campus; simplified new goals default to
+    completed activities and require whole-number targets. Existing definitions
+    retain hidden values. Directors create/edit university proposals and can
+    publish directly. Revisions must reference active targets in matching scope.
+    Validate before saving, append history, and commit publication atomically.
+    """
     reject_sample_write()
     proposal = owned_proposal(proposal_id, lock=request.method == 'POST') if proposal_id else None
     if proposal and proposal.status not in ('draft', 'returned'):
@@ -250,6 +292,14 @@ def edit(proposal_id=None):
 
 
 def publish(proposal):
+    """Create approved plan/indicator/target records from validated proposal data.
+
+    Caller enforces director permission and commits. Lock replacement targets;
+    reject stale/inactive, wrong-campus, or wrong-year revisions. Retire replaced
+    targets instead of erasing history. Shared AOP/ASP revisions retire active
+    peers and create matching new definitions for all linked plan types.
+    Mark proposal approved and record reviewer/history in the same transaction.
+    """
     payload = validate_definition(proposal.payload)
     replacement = None
     if proposal.replaces_target_id:
@@ -298,6 +348,13 @@ def publish(proposal):
 @login_required
 @roles_required('coordinator', 'director')
 def review(proposal_id):
+    """Let director approve or return a submitted campus proposal exactly once.
+
+    Lock POST review, require submitted status, and reject preview writes.
+    Returning requires explanation; approval publishes official targets.
+    Ownership permits coordinator read access, but only director can decide.
+    Save decision/note/history together; validation errors roll back changes.
+    """
     proposal = owned_proposal(proposal_id, lock=request.method == 'POST')
     error = None
     if request.method == 'POST':
@@ -337,6 +394,11 @@ def review(proposal_id):
 @login_required
 @roles_required('coordinator', 'director', 'admin')
 def target_activities(target_id):
+    """Show paginated mapped activities in target year and campus scope.
+
+    Coordinators must own target campus. Listing includes upcoming mappings;
+    target assessment separately checks cutoff, ended state, and attendance.
+    """
     target = db.get_or_404(AnnualTarget, target_id)
     if current_user.role == 'coordinator' and target.campus_id != current_user.campus_id:
         abort(403)
@@ -355,6 +417,14 @@ def target_activities(target_id):
 @login_required
 @roles_required('director')
 def evidence(target_id):
+    """Let director attach evidence to an active target; previews cannot write.
+
+    Live basis replaces activity mappings after checking target year/campus.
+    Aggregate basis appends an approved snapshot with source and coverage note;
+    dates must be ordered, in target year, and through cutoff. Earlier snapshots
+    stay stored; assessment selects latest eligible snapshot instead of summing.
+    Commit only validated changes; failed validation rolls back the transaction.
+    """
     reject_sample_write()
     target = db.get_or_404(AnnualTarget, target_id)
     if not target.is_active:

@@ -37,6 +37,7 @@ MILESTONE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp', 'pdf', 'docx'}
 
 
 def _max_event_slots():
+    """Read configured slot ceiling, clamp to at least one; default to 100 if invalid."""
     setting = SystemSetting.query.filter_by(key='max_slots_per_event').first()
     try:
         return max(1, int(setting.value)) if setting else 100
@@ -62,12 +63,17 @@ def _activity_categories():
 
 
 def _selected_sdgs(form):
-    """Resolve submitted SDG ids against the server-side catalogue."""
+    """Resolve numeric submitted SDG IDs against stored catalogue, ordered by number.
+
+    Ignore nonnumeric/unknown IDs; create/edit routes require at least one
+    resolved selection when catalogue exists.
+    """
     ids = [int(value) for value in form.getlist('sdg_ids') if value.isdigit()]
     return SdgGoal.query.filter(SdgGoal.id.in_(ids)).order_by(SdgGoal.number).all() if ids else []
 
 
 def _activity_form_context(**context):
+    """Supply category/SDG choices and slot ceiling without replacing caller overrides."""
     context.setdefault('categories', _activity_categories())
     context.setdefault('sdgs', SdgGoal.query.order_by(SdgGoal.number).all())
     context.setdefault('max_slots', _max_event_slots())
@@ -75,7 +81,12 @@ def _activity_form_context(**context):
 
 
 def _attendance_state(event, now):
-    """Describe the current attendance action for an event without changing it."""
+    """Describe check-in phase without writing attendance.
+
+    Locked until 30 minutes before start, active until end, then final due.
+    If no end_date exists, start time also acts as end. Final due is a prompt,
+    not proof that attendance has been saved or completed.
+    """
     opens_at = event.date - timedelta(minutes=30)
     ends_at = event.end_date or event.date
     if now < opens_at:
@@ -98,6 +109,12 @@ def _attendance_state(event, now):
 
 
 def _save_event_cover(file):
+    """Validate cover extension, real image format, and 5 MB limit before saving.
+
+    Store UUID filename under public event uploads; keep sanitized original
+    name as metadata. Return relative path, or None for no file. This saves
+    disk content only; caller separately saves event reference in database.
+    """
     if not file or not file.filename:
         return None
     extension = secure_filename(file.filename).rsplit('.', 1)[-1].lower()
@@ -130,7 +147,12 @@ def _save_event_cover(file):
 
 
 def _validate_milestone(file):
-    """Validate content, not just the user-controlled filename extension."""
+    """Validate milestone size/type before private storage; rewind stream after checks.
+
+    Images must decode and match extension. PDF check verifies %PDF- prefix;
+    DOCX check verifies ZIP structure only, not full document contents.
+    These format checks are not malware scanning. Return allowed extension.
+    """
     extension = secure_filename(file.filename).rsplit('.', 1)[-1].lower()
     if extension not in MILESTONE_EXTENSIONS:
         raise ValueError('Milestones must be JPEG, PNG, WebP, PDF, or DOCX files.')
@@ -166,7 +188,12 @@ def _coordinator_campus_id():
 
 
 def _parse_event_schedule(form):
-    """Parse activity dates and derive its cancellation deadline from days."""
+    """Parse start/optional end and derive cancellation deadline from whole days.
+
+    Accept 0-365 days before start, default 2. End must follow start when
+    supplied. Return (schedule, None) or (None, error); caller displays errors
+    before writes. This validator does not require start to be in future.
+    """
     try:
         start = datetime.fromisoformat(form.get('date', '').strip())
         end_raw = form.get('end_date', '').strip()
@@ -187,6 +214,12 @@ def _parse_event_schedule(form):
 
 
 def _campus_calendar(campus_id, year=None, month=None, dashboard=False):
+    """Group campus activities by start day in selected calendar month.
+
+    Calendar scope is independent of performance-period selector. Invalid
+    year/month falls back to current month; stop navigation at supported year
+    limits. Dashboard links preserve query state and point to calendar anchor.
+    """
     now = datetime.now()
     year, month = year or now.year, month or now.month
     if not 1 <= year <= 9999 or not 1 <= month <= 12:
@@ -203,6 +236,7 @@ def _campus_calendar(campus_id, year=None, month=None, dashboard=False):
     following = ((year + 1, 1) if month == 12 else (year, month + 1)) if (year, month) != (9999, 12) else None
 
     def month_url(value):
+        """Build internal previous/next month link, or None at calendar boundary."""
         if value is None:
             return None
         query = request.args.to_dict(flat=False) if dashboard else {}
@@ -222,6 +256,15 @@ def _campus_calendar(campus_id, year=None, month=None, dashboard=False):
 @login_required
 @role_required('coordinator')
 def coordinator_dash():
+    """Assemble campus workspace with independently scoped performance/calendar data.
+
+    Performance uses chosen period; incomplete-attendance backlog spans all
+    dates so old unfinished work remains visible. Merge findings by activity
+    and page five at a time. Workspace status/category/date filters select
+    activity list and recent signup scope, not annual goals or calendar month.
+    All activity data uses assigned campus; cancelled list means activities
+    with cancelled registrations, not a separate activity cancellation status.
+    """
     campus_id = _coordinator_campus_id()
     # Workspace dates remain independent of the performance-period selector.
     try:
@@ -300,6 +343,7 @@ def coordinator_dash():
 @login_required
 @role_required('coordinator')
 def activity_calendar():
+    """Render assigned-campus calendar through shared month-boundary rules."""
     return render_template('coordinator/activity_calendar.html',
                            **_campus_calendar(_coordinator_campus_id(),
                                               request.args.get('year', type=int),
@@ -310,6 +354,13 @@ def activity_calendar():
 @login_required
 @role_required('coordinator')
 def cancellation_requests():
+    """List/review signup cancellation requests within coordinator's campus.
+
+    Optional activity/status filters narrow listing. POST locks request and
+    rechecks campus plus pending state; approved sets signup to cancelled,
+    rejected leaves signup unchanged. Save reviewer/time/note/audit and PSU
+    notification together. External signups have no account notification.
+    """
     status = request.args.get('status', 'pending')
     if status not in ('pending', 'approved', 'rejected', 'all'):
         status = 'pending'
@@ -371,6 +422,14 @@ def cancellation_requests():
 @login_required
 @role_required('coordinator')
 def create_activity():
+    """Create activity under coordinator's assigned campus, never submitted campus ID.
+
+    Validate required text, category, SDG selection, positive slots within
+    configured ceiling, optional positive target, schedule, and policy versions.
+    Required NDA needs text/version. Validate/save optional cover before storing
+    event, SDG links, and upload metadata. Target participants and slot capacity
+    are separate values; creation does not derive one from the other.
+    """
     campuses = [current_user.campus] if current_user.campus else []
     categories = _activity_categories()
     if request.method == 'POST':
@@ -459,13 +518,13 @@ def create_activity():
 @login_required
 @role_required('coordinator')
 def edit_activity(event_id):
-    """Edit an activity owned by the coordinator's assigned campus.
+    """Edit only activity matching signed-in user's campus; campus stays unchanged.
 
-    Campus ownership is enforced server-side: the event must belong to the
-    coordinator's campus, otherwise 403. The campus is never changed by the
-    edit (a submitted campus_id is ignored), so a coordinator cannot move an
-    event to another campus. Capacity cannot be reduced below the number of
-    existing registrations.
+    Revalidate category, SDGs, dates, slots, targets, and policy fields before
+    saving. Capacity cannot fall below count of all existing registrations,
+    including cancelled rows; this differs from join route's occupied-slot rule.
+    Save new cover reference, commit, then remove replaced cover from disk.
+    Ownership check is server-side; submitted campus_id cannot move activity.
     """
     event = db.session.get(Event, event_id)
     if event is None:
@@ -575,7 +634,12 @@ def edit_activity(event_id):
 @login_required
 @role_required('coordinator')
 def delete_activity(event_id):
-    """Permanently remove a campus-owned event and notify PSU volunteers."""
+    """Delete owned activity and related records through configured ORM/DB cascades.
+
+    Queue account notifications before deletion, commit, then remove cover file.
+    This is permanent event deletion, unlike reviewing one signup cancellation.
+    External registrations receive no account notifications.
+    """
     event = db.session.get(Event, event_id)
     if event is None:
         abort(404)
@@ -613,6 +677,12 @@ def delete_activity(event_id):
 @login_required
 @role_required('coordinator')
 def publish_announcement(event_id):
+    """Save typed campus-owned activity announcement and notify pending/confirmed users.
+
+    Require allowed type and 1-1000 characters. Save announcement/notifications
+    in one transaction; external and completed/cancelled signups are not notified.
+    Cancelled/postponed announcement type does not itself change event/signups.
+    """
     event = db.session.get(Event, event_id)
     if event is None:
         abort(404)
@@ -657,6 +727,20 @@ def publish_announcement(event_id):
 @login_required
 @role_required('coordinator')
 def attendance():
+    """Search/page campus roster and save only submitted attendance choices.
+
+    GET excludes cancelled signups, supports PSU/external name/email/ID search
+    and status filter, and shows 15 rows per page. Display counts describe
+    current page, not entire activity. Activity picker shows up to 25 matches.
+
+    POST locks campus event and submitted eligible registrations; reject
+    duplicate IDs, foreign IDs, invalid statuses, or batches above 50. Check-in
+    opens 30 minutes before start. Blank status leaves row unchanged.
+    Present becomes completed only after end; otherwise signup is confirmed.
+    Saving early present does not auto-complete later: final attendance must
+    be saved after end for completion/certificate eligibility.
+    Bulk update existing rows, insert missing attendance, then commit together.
+    """
     now = datetime.now()
     volunteer_search = request.args.get('volunteer_search', '').strip()
     attendance_filter = request.args.get('attendance_status', '')
@@ -792,6 +876,11 @@ def attendance():
 @login_required
 @role_required('coordinator')
 def upload_milestone(event_id):
+    """Validate and store owned activity evidence under private UUID file path.
+
+    Keep sanitized original filename in database for download. File save
+    precedes database commit; validation and private download checks are separate.
+    """
     event = db.session.get(Event, event_id)
     if event is None:
         abort(404)
@@ -832,7 +921,12 @@ def upload_milestone(event_id):
 @login_required
 @roles_required('coordinator', 'director', 'admin')
 def download_milestone(milestone_id):
-    """Serve new private milestone files only to authorized internal roles."""
+    """Download private milestone for permitted internal role and campus scope.
+
+    Coordinators must own event campus; director/admin can read across campuses.
+    Retired uploads/ paths return 410. Serve attachment from private folder,
+    using original filename for download rather than exposing stored UUID path.
+    """
     milestone = db.session.get(Milestone, milestone_id)
     if milestone is None:
         abort(404)
@@ -850,6 +944,12 @@ def download_milestone(milestone_id):
 @login_required
 @role_required('coordinator')
 def export_events_csv():
+    """Export all filtered campus activity rows, independent of screen page.
+
+    Derive campus from account, validate report period/attention scope, fetch
+    batches, and pass unchanged rows/totals to shared CSV renderer. Default
+    export period is all dates unless supplied dates/preset narrow it.
+    """
     category = request.args.get('category', '').strip()
     try:
         export_period = resolve_period(dict(request.args, period=request.args.get('period', 'all')))
@@ -883,6 +983,11 @@ def export_events_csv():
 @login_required
 @role_required('coordinator')
 def export_events_pdf():
+    """Export same campus-scoped report source as CSV, formatted as PDF.
+
+    Preserve dates/category/title/attention/event filters and full totals;
+    never accept requested campus as replacement for account campus.
+    """
     from app.reports import _build_meta
     category = request.args.get('category', '').strip()
     try:
@@ -911,6 +1016,7 @@ def export_events_pdf():
 
 
 def _date_range_label(start_date, end_date):
+    """Reuse shared export date label so coordinator downloads use same wording."""
     from app.reports import _date_range_label as _lbl
     return _lbl(start_date, end_date)
 
@@ -919,6 +1025,13 @@ def _date_range_label(start_date, end_date):
 @login_required
 @role_required('coordinator')
 def analytics():
+    """Build campus analytics from authorized report evidence and shared chart groups.
+
+    Main KPIs/charts/full export scope share period/category/title/attention
+    filters; detail rows paginate separately. Attendance Snapshot uses latest
+    campus activities across all dates/categories. Annual plan retains its own
+    year scope. These sections intentionally need not show matching totals.
+    """
     campus_id = _coordinator_campus_id()
     try:
         period = resolve_period(request.args)
@@ -968,7 +1081,14 @@ def analytics():
 @login_required
 @role_required('coordinator')
 def add_external_participant(event_id):
-    """Coordinators manually encode an outsider for one of their campus events."""
+    """Manually register external volunteer for an owned campus activity.
+
+    Require ID number; gender is optional but must use allowed response.
+    Reuse only campus-safe guest records and fill missing optional details.
+    Insert confirmed signup only if participant/event pair has no existing row;
+    existing rows are not restored or duplicated. Notify campus after signup
+    commit. This manual path does not apply public join date/slot/consent checks.
+    """
     event = db.session.get(Event, event_id)
     if event is None:
         abort(404)
