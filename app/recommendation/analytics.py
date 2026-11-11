@@ -1,8 +1,9 @@
 """
 Analytics Aggregator for PSU Volunteer Hub
 ===========================================
-Builds aggregate query results used by the director dashboard.
-All methods are static — no state, pure aggregation queries.
+Read-only aggregates for director/coordinator views and historical exports.
+Attendance totals count participation records, not distinct people, unless
+explicitly stated. Each method documents its scope; not all share report filters.
 """
 from datetime import datetime, timedelta
 from app.models import db
@@ -13,12 +14,19 @@ from app.models.event import (Event, Registration, Attendance, Campus,
 
 
 class AnalyticsAggregator:
-    """Produces pre-aggregated data for director analytics views."""
+    """Group database records into display-ready counts without changing data."""
 
     @staticmethod
     def historical_summary(campus_id=None, start_year=None, end_year=None,
                            activity_type=None):
-        """Return aggregate counts imported from audited legacy reports."""
+        """Summarize imported HistoricalActivity rows, separate from live events.
+
+        Apply optional campus, inclusive year range, and exact activity-type
+        filters to both row counts and reported volunteer totals. Sum reported
+        participations, not unique volunteers; missing counts contribute no sum.
+        Count distinct known years and flag each row missing a year or count once.
+        Year filters exclude rows with unknown years; an empty sum becomes zero.
+        """
         query = HistoricalActivity.query
         volunteer_query = db.session.query(
             db.func.sum(HistoricalActivity.volunteer_count))
@@ -53,7 +61,14 @@ class AnalyticsAggregator:
     @staticmethod
     def historical_campus_stats(campus_id=None, start_year=None, end_year=None,
                                 activity_type=None):
-        """Return aggregate activity and participation totals by reporting unit."""
+        """Group filtered historical rows by source reporting-unit name.
+
+        Use the same campus, inclusive year, and activity-type scope as the
+        historical summary. SQL counts activities, sums reported participations,
+        and counts rows missing a year or volunteer count. Convert empty sums
+        to zero, then order units by participations descending. A person can
+        contribute to several activity totals; these are not unique-person counts.
+        """
         query = db.session.query(
             HistoricalActivity.unit_name,
             db.func.count(HistoricalActivity.id),
@@ -82,6 +97,13 @@ class AnalyticsAggregator:
 
     @staticmethod
     def _event_attendance_counts(events):
+        """Return two event-ID maps: registration counts and present attendance.
+
+        Aggregate each table before joining so registrations and attendance do
+        not multiply one another. Outer joins and COALESCE retain events with
+        no records as zero. Registration totals include cancelled registrations;
+        this helper serves the attendance snapshot, not filtered report KPIs.
+        """
         event_ids = [event.id for event in events]
         registrations = db.session.query(Registration.event_id.label('event_id'),
             db.func.count(Registration.id).label('total')).filter(Registration.event_id.in_(event_ids)
@@ -98,7 +120,14 @@ class AnalyticsAggregator:
 
     @staticmethod
     def attendance_summary(campus_id=None, limit=10):
-        """Return [{event, registered, attended, rate}] for completed/upcoming events."""
+        """Build the coordinator snapshot from the latest event dates, limit 10.
+
+        Scope by event campus when supplied; include future and past events,
+        independently of report date/category filters. Use batched count maps
+        and compute present attendance / all registrations * 100, rounded to
+        one decimal place, or zero with no registrations. Counts are per event,
+        not distinct people; cancelled registrations remain in the denominator.
+        """
         event_query = Event.query
         if campus_id:
             event_query = event_query.filter_by(campus_id=campus_id)
@@ -117,7 +146,14 @@ class AnalyticsAggregator:
 
     @staticmethod
     def department_participants(campus_id=None, department=None):
-        """Participant affiliations available for the selected campus only."""
+        """Count present account-linked attendance by non-null affiliation.
+
+        Scope by the account's home campus and exact affiliation when supplied,
+        not by the event's campus. Count all dates and account roles, with no
+        report date/category filters. Repeated attendance by one person counts
+        repeatedly; external participants have no User link and are excluded.
+        Return affiliations ordered by attendance count descending.
+        """
         query = db.session.query(
             User.college_affiliation, db.func.count(Attendance.id)
         ).join(Attendance, Attendance.user_id == User.id).filter(
@@ -132,8 +168,13 @@ class AnalyticsAggregator:
 
     @staticmethod
     def skill_distribution(limit=10):
-        """Most common volunteer skills (descriptive only; does not alter the
-        recommendation engine)."""
+        """Rank profile skill selections by linked-account count, highest first.
+
+        Count user_skills links per skill and return at most limit rows. No
+        campus, role, active-account, or report-date filter applies. These are
+        self-selected profile tags, not verified skills or attendance outcomes;
+        this read-only summary does not change recommendation scoring.
+        """
         rows = db.session.query(
             Skill.name, db.func.count(user_skills.c.user_id)
         ).join(user_skills, Skill.id == user_skills.c.skill_id
@@ -144,7 +185,13 @@ class AnalyticsAggregator:
 
     @staticmethod
     def interest_distribution(limit=10):
-        """Most common volunteer interests (descriptive only)."""
+        """Rank profile interest selections by linked-account count.
+
+        Count user_interests links per interest, sort descending, and return
+        at most limit rows. Include all linked accounts regardless of campus,
+        role, active status, or report dates. Counts describe profile choices,
+        not verified participation; one account can select several interests.
+        """
         rows = db.session.query(
             Interest.name, db.func.count(user_interests.c.user_id)
         ).join(user_interests, Interest.id == user_interests.c.interest_id
@@ -155,7 +202,12 @@ class AnalyticsAggregator:
 
     @staticmethod
     def role_demographics():
-        """Return dict of {role: count} across all users."""
+        """Return {role: account_count}, grouped across all stored User rows.
+
+        Include inactive accounts and every campus, independently of report
+        filters. These counts describe accounts, not attendance or registrations;
+        external participants are separate records and do not appear here.
+        """
         rows = db.session.query(User.role, db.func.count(
             User.id)).group_by(User.role).all()
         return {role: count for role, count in rows}
@@ -163,7 +215,20 @@ class AnalyticsAggregator:
     @staticmethod
     def sex_participation(campus_id=None, start_date=None, end_date=None,
                           category=None, sex=None, activity_name=None, event_ids=None):
-        """Verified PSU and external attendance grouped by recorded sex."""
+        """Combine present PSU and external attendance by recorded sex.
+
+        Query PSU volunteer accounts directly through Attendance.user_id;
+        query external participants through Registration, then merge counts.
+        Both use event campus, category, literal title search, and event-ID scope.
+        Dates refer to event dates: start inclusive, end inclusive via next-day
+        exclusive bound; malformed dates are ignored. An empty event_ids list
+        selects nothing, while None leaves event IDs unrestricted.
+
+        Count attendance records, so repeat participants can count more than
+        once. Keep 'Prefer Not to Say' separate from NULL ('Not recorded').
+        Return fixed label order with zero-filled groups, or only the requested
+        sex label when sex is supplied; unsupported labels yield no output rows.
+        """
         query = db.session.query(User.sex, db.func.count(Attendance.id)).join(
             Attendance, Attendance.user_id == User.id).join(
             Event, Event.id == Attendance.event_id).filter(
@@ -228,7 +293,20 @@ class AnalyticsAggregator:
 
     @staticmethod
     def award_leaderboards(year):
-        """Return the annual, verified-participation Top 5 recognition lists."""
+        """Build annual volunteer and campus Top 5 recognition lists.
+
+        Use event dates from January 1 inclusive to next January 1 exclusive,
+        independent of dashboard activity filters. Rank volunteer accounts by
+        present attendance count, then completed-registration count, then name;
+        user ID stabilizes selection when names also match. Show home campus.
+
+        Rank official campuses by present account-linked attendance divided by
+        non-cancelled account-linked registrations * 100 (one decimal place),
+        then attendance count and name. Attribute these counts to event campus;
+        omit campuses with no eligible registrations and exclude external rows.
+        Rank equality uses numeric scores only, so names order tied rows without
+        breaking shared ranks. Return at most five entries per list, even at ties.
+        """
         start = datetime(year, 1, 1)
         end = datetime(year + 1, 1, 1)
         completed_counts = db.session.query(
@@ -283,6 +361,12 @@ class AnalyticsAggregator:
 
     @staticmethod
     def _rank_top_five(rows, score_keys):
+        """Assign competition ranks to already sorted rows, limited to five.
+
+        Equal score-key tuples share rank; the next rank uses list position
+        (1, 1, 3). Names are ordering tie-breakers, not ranking scores. Add rank
+        to the supplied dictionaries in place; ties do not expand the cutoff.
+        """
         previous, rank = None, 0
         for position, row in enumerate(rows[:5], start=1):
             score = tuple(row[key] for key in score_keys)
