@@ -1,6 +1,8 @@
 # Profile recommendation cards and Analytics cleanup
 
-Verified locally on 11 November 2026. These changes are not deployed.
+Verified locally on 11 November 2026, then deployed successfully later that day.
+The local-only statements below describe the initial implementation checks;
+the release record at the end supersedes their deployment status.
 
 ## Scope and design
 
@@ -107,3 +109,33 @@ with Enter. Both header screenshots were visually inspected. No browser errors;
 `git diff --check` passed. Hard Gate, Purpose, Liveliness and Craftsmanship: PASS.
 No backend, data or deployment changes. Chromium-only checks; full tests were
 not repeated for this class-only edit.
+
+## Published release: 11 November 2026
+
+The user explicitly authorized committing, pushing to both repositories and
+deploying the completed UI changes. Application commits:
+
+- Shared feature branch `codex/volunteer-profile-settings`: `48c1ae9` on both remotes.
+- `Xed-stack/Psu_VolunteerHub` main: `8fa9896`.
+- `arlrom003/PSU-Volunteer-Hub` main: `85a20d4`.
+- Live watched branch `thesis/codex/performance-workflows`: `0b9a576`.
+
+Each main received only this scoped UI commit through a clean cherry-pick,
+preserving its existing history. Nine focused profile/Help/guide tests passed
+on the original checkout and independently on both main checkouts. The live
+checkout's complete tracked tree matched the tested original checkout.
+
+Railway deployment `b6e4c045-995b-44ca-b9a0-0f041f87449a` is ACTIVE and reports
+“Deployment successful” for this release on `https://www.psuvolunteerhub.tech`.
+Public login and Help returned HTTP 200. Both changed CSS assets returned 200
+and match the release bytes after newline normalization. Anonymous profile
+access still redirects to sign-in. No database writes, migrations, seed/reset
+commands or configuration changes were performed for this release.
+
+Post-deployment authenticated UI checks were not performed; role interactions
+were verified using isolated fictional data before deployment. The separate
+main Railway service already showed a failed build before this work; the
+successful release above concerns the Demo service serving the live domain.
+Generated presentation/document files and scratch output remain untracked.
+Release metadata is a documentation-only follow-up; the live application
+revision remains `0b9a576`.
