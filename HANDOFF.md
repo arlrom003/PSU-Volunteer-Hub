@@ -1,5 +1,102 @@
 # PSU Volunteer Hub — Continuation Handoff
 
+## Current handoff: 12 November 2026
+
+This section supersedes older local/published-state notes below. Latest task:
+clean the project root without losing documents, database data, or working code,
+and record the resulting locations here. Cleanup is complete locally. No database
+reset, migration, dependency install, or deployment was part of this cleanup.
+
+### Published release and analytics documentation
+
+Latest release verified in this chat: application/documentation commit `664e165`,
+published to both `codex/volunteer-profile-settings` branches. Both repositories'
+`main` branches contain the complete release, not only selected fixes:
+
+- `origin/main` (`Xed-stack/Psu_VolunteerHub`): `2f81923`.
+- `thesis/main` (`arlrom003/PSU-Volunteer-Hub`): `2c9c2b9`.
+- Demo's watched `thesis/codex/performance-workflows`: `b20715b`.
+
+All three release trees matched exactly. Railway deployment
+`edb7858a-3881-42ec-bec3-0b4128b03ada` was verified ACTIVE / Deployment successful
+for `https://www.psuvolunteerhub.tech`; login returned HTTP 200. This supersedes
+older statements that the main branches lacked the complete live release.
+The separate Railway service named `psu-volunteer-hub-main` was observed deploying
+after main pushes; its database remained offline. Its success was not verified.
+
+Event Readiness Forecast and `forecast_turnout()` were removed. A later cleanup
+removed 14 unused analytics methods and obsolete tests; 47 focused analytics,
+historical-import, and report checks passed. `analytics.py` retains 9 active
+analytics methods plus 2 helpers. Shared screen analytics also live in
+`app/dashboard.py`, `app/reports.py`, and `app/annual_goals.py`.
+
+Plain review notes now document analytics, all 7 recommendation-engine functions,
+and 106 functions across the dashboard/report/annual-goal and goal/event/coordinator
+route modules. AST comparison confirmed executable code unchanged by those notes.
+Do not treat that documentation-only check as a new full-suite test run.
+
+Historical CSV packaging is included in the release. User's live dry run showed
+`216 created, 0 updated, 0 unchanged`; actual import completion was not confirmed
+in this chat. Do not infer successful import from packaging or dry-run success.
+
+### Root cleanup and recoverable archives
+
+Archive base (outside this repository, on the same local machine):
+`C:/Users/arlro/.codex/visualizations/2026/11/11/01a1c9ba-3c3c-71a3-bbfd-a40c15fc76d9/`.
+
+- `project-cleanup-20261112-01/`: original `.codex-build/`, `output/`,
+  `outputs/`, `tmp/`, and `work/`. Manuscripts, presentations, source scripts,
+  and rendered artifacts were moved, not discarded. Eleven regenerable cache
+  directories were deleted from the project, including root npm/pytest caches.
+- `project-cleanup-20261112-02/`: original `.skill-install-tmp/`,
+  `.qa-presentation-temp/`, `.codex-remote-attachments/`, `venv/`, and remaining
+  `.qa-profile-cards-temp/` evidence. Saved QA MariaDB data and attachments are
+  preserved here. No running process referenced these paths before moving them;
+  no MariaDB server was running. Spare `venv/` is archived for restoration,
+  not a portable replacement environment; active `.venv/` stays in the project.
+- Empty `tools/` and `.qa-title-final-temp/` folders were verified empty and removed.
+- Seven root `.log` files moved into ignored `logs/`; SHA-256 checks confirmed
+  unchanged contents. No tracked launch scripts referenced the old log paths.
+
+Older relative screenshot/log paths under the archived folders now resolve by
+prefixing the corresponding archive directory. Preserve those archives when
+reviewing old QA or manuscript evidence; they are not part of either Git remote.
+
+Four root-contained QA worktrees were clean, had only regenerable ignored caches,
+and had no running process references. They were retired with `git worktree remove`
+without force; branches/commits remain referenced in Git:
+
+- `.qa-performance-baseline-temp`: detached `c960159`.
+- `.qa-profile-cards-temp/publish-live`: `codex/ui-updates-live`, `0b9a576`.
+- `.qa-profile-cards-temp/publish-origin`: `codex/ui-updates-origin`, `e004b5c`.
+- `.qa-profile-cards-temp/publish-thesis`: `codex/ui-updates-thesis`, `6b9397d`.
+
+Other registered worktrees outside the project root remain intact, including
+`password-live`, `forecast-main-origin`, and `forecast-main-thesis`, used for
+publishing while preserving each repository's history. Do not recursively delete
+registered worktrees; use Git's worktree commands after checking their changes.
+
+### Cleanup tracking and publication
+
+- `.gitignore` now includes `/.agents/` and `/logs/`, retaining `*.log` as well.
+- Twenty previously tracked `.agents/skills/security-audit/` files are removed
+  from Git tracking so the ignore rule takes effect; their local copies remain.
+  These are Git tracking removals, not deleted local skills.
+- The user subsequently requested committing/pushing this cleanup to both
+  repositories and live. Publish the ignore rules, skill tracking removals, and
+  this handoff together, keeping both main branches and the watched live branch
+  identical. Release IDs above describe the preceding application release;
+  the cleanup changes no deployed application code or database state.
+- `docs/PSU_Volunteer_Hub_System_Documentation.docx` remains an untracked finished
+  document in place. Do not include it in a routine source commit without a
+  specific request.
+
+Preserved: application source, `.git`, active `.venv`, `.agents`, `.opencode`,
+`instance/` databases, `Database/` exports, uploads, migration files, and finished
+documentation. No runtime tests were rerun for filesystem organization alone;
+verify ignore rules, preserved local skills, tracked application parity, remote
+branch parity, and the requested Railway deployment when publishing.
+
 ## Live profile release: 11 November 2026
 
 The user explicitly requested merging the profile settings into live. Demo's

@@ -5,6 +5,9 @@ venv/
 # ignore opencode config
 .opencode/
 
+# ignore local agent skills
+/.agents/
+
 # Local database exports must never be tracked; keep versioned schema changes in migrations/.
 instance/
 Database/*.sql
@@ -19,6 +22,7 @@ __pycache__/
 
 .env
 # ignore runtime server logs
+/logs/
 *.log
 
 # ignore local tooling caches
